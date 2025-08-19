@@ -16,21 +16,25 @@ This module allows you to control Powersoft amplifiers using their network API.
 ## Available Actions
 
 **Power Control**
+
 - Power On/Off
 - Toggle Power
 
 **Channel Control**
+
 - Mute/Unmute Channel
 - Set Channel Gain
 - Select Preset
 
 **System**
+
 - Reboot Device
 - Factory Reset (use with caution)
 
 ## Available Variables
 
 **System**
+
 - Device Model
 - Firmware Version
 - IP Address
@@ -38,6 +42,7 @@ This module allows you to control Powersoft amplifiers using their network API.
 - Fan Speed
 
 **Channel Status**
+
 - Channel Name
 - Mute Status
 - Gain Level

@@ -189,25 +189,25 @@ These are used as the `"id"` field in API requests. Replace `{0}`, `{1}` with th
 
 ```json
 {
-  "version": "1.0.0",
-  "clientId": "x8-panel",
-  "payload": {
-    "type": 100, // ACTION
-    "action": {
-      "type": 20, // WRITE
-      "values": [
-        {
-          "id": "/Device/Audio/Presets/Live/Generals/Standby/Value",
-          "data": {
-            "type": 40, // BOOL
-            "boolValue": true
-          }
-        }
-      ]
-    }
-  },
-  "tag": 1,
-  "updateId": 1
+	"version": "1.0.0",
+	"clientId": "x8-panel",
+	"payload": {
+		"type": 100, // ACTION
+		"action": {
+			"type": 20, // WRITE
+			"values": [
+				{
+					"id": "/Device/Audio/Presets/Live/Generals/Standby/Value",
+					"data": {
+						"type": 40, // BOOL
+						"boolValue": true
+					}
+				}
+			]
+		}
+	},
+	"tag": 1,
+	"updateId": 1
 }
 ```
 

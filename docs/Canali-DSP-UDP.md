@@ -7,6 +7,7 @@ This document will be updated as more PDF pages are shared and validated on hard
 ---
 
 ### 0x19 – READALLALARMS2 (Newer)
+
 Used to read extended alarms/status.
 
 - Request data: none (`count=0`).
@@ -18,15 +19,18 @@ Used to read extended alarms/status.
   - `channel X alarms` (8 × UINT32LE for channels 0..7)
 
 Bit meanings (excerpt):
+
 - `global_alarms` bits: 0 mains phases detect error (only X), 1 AD config fault, 2 DA config fault, 3 AUX voltage fault (only X), 4 Digi board over-temp [shutdown], 5 PSU over-temp (only X) [shutdown], 6 Fan fault [shutdown], 7 moderate over-temp (only X) [shutdown], 8 high over-temp (only X) [shutdown].
 - `channel X` bits: 0 input clip, 1 active thermal SOA (only X), 3 over-temp, 4 rail voltage fault, 5 AUX current fault (only X), 6 other fault, 7 low load protection. Others: not used per excerpt.
 
 Probe usage:
+
 ```powershell
 corepack yarn probe:udp <ip> 1234 3000 readallalarms2
 ```
 
 Example output (fields vary by device):
+
 ```
 READALLALARMS2 decoded: {
   answer_ok: 1,
@@ -39,6 +43,7 @@ READALLALARMS2 decoded: {
 ---
 
 ## Overview
+
 - Transport: UDP
 - Default device port: `1234`
 - All messages are fixed header frames with optional data, followed by CRC16 and an inverted command byte.
@@ -49,22 +54,25 @@ READALLALARMS2 decoded: {
 ---
 
 ## Generic Message Format
+
 From the PDF summary (applies to both requests and responses):
 
-- __STX__: 0x02
-- __cmd__: 1 byte. Requests: 0–127. Responses: 128–255 (typically `~request_cmd`).
-- __cookie__: uint16 LE (arbitrary; echoed by device)
-- __count__: uint16 LE (number of data bytes)
-- __answer_port__: uint16 LE (UDP port where device replies; if 0, device may use 1234)
-- __data__: command-specific payload (length = `count`)
-- __crc16__: uint16 LE, CRC‑16/IBM of `data` (0 when `count=0`).
-- __~cmd__: 1 byte, bitwise complement of `cmd` (i.e., `cmd ^ 0xFF`).
-- __ETX__: 0x03
+- **STX**: 0x02
+- **cmd**: 1 byte. Requests: 0–127. Responses: 128–255 (typically `~request_cmd`).
+- **cookie**: uint16 LE (arbitrary; echoed by device)
+- **count**: uint16 LE (number of data bytes)
+- **answer_port**: uint16 LE (UDP port where device replies; if 0, device may use 1234)
+- **data**: command-specific payload (length = `count`)
+- **crc16**: uint16 LE, CRC‑16/IBM of `data` (0 when `count=0`).
+- **~cmd**: 1 byte, bitwise complement of `cmd` (i.e., `cmd ^ 0xFF`).
+- **ETX**: 0x03
 
 Notes:
-- For STANDBY (cmd=0x0E), the command page requires __CRC16=0 even when `count=4`__. Devices ignore the request if a computed CRC is used.
+
+- For STANDBY (cmd=0x0E), the command page requires **CRC16=0 even when `count=4`**. Devices ignore the request if a computed CRC is used.
 
 ### Command List (from PDF)
+
 - 0 PING (`~cmd`=255)
 - 1 READGM (`~cmd`=254)
 - 2 WRITEMUTE (`~cmd`=253)
@@ -100,6 +108,7 @@ This list may vary by model/firmware; only a subset is implemented in the probe.
 ---
 
 ## Frame Format
+
 ```
 Offset  Size  Field                   Notes
 0       1     STX                     0x02
@@ -119,12 +128,15 @@ Offset  Size  Field                   Notes
 ---
 
 ## Common Response Header
+
 Device responses mirror the request header with:
+
 - `cmd` set to `~request_cmd` (bitwise NOT), e.g., request `0x01` → response `0xFE`.
 - Same `cookie` as the request.
 - `count`, `answer_port`, and `data` according to the command.
 
 Example response header (decoded by the probe):
+
 ```
 Header: {
   STX: 2,
@@ -141,6 +153,7 @@ Header: {
 ---
 
 ### 0x0F – READALLALARMS (Deprecated)
+
 Reads alarms/live status. PDF notes this is deprecated (use newer variant if available), but devices still respond.
 
 - Request data: none (`count=0`).
@@ -149,11 +162,13 @@ Reads alarms/live status. PDF notes this is deprecated (use newer variant if ava
   - `alarms` = bitfield (PDF: status of output relays for Ottocanali DSP+D)
 
 Observed example:
+
 ```
 READALLALARMS decoded: { answer_ok: 1, alarms_hex: '0x00', alarms_bin: '00000000', dataLen: 4 }
 ```
 
 Probe usage:
+
 ```powershell
 corepack yarn probe:udp <ip> 1234 3000 readallalarms
 ```
@@ -163,11 +178,13 @@ corepack yarn probe:udp <ip> 1234 3000 readallalarms
 ## Commands Validated So Far
 
 ### 0x00 – PING
+
 - Purpose: connectivity check.
 - Request data: none (`count=0`).
 - Response: device echoes cookie; data layout not specified by PDF, but presence of valid response confirms connectivity and framing.
 
 Probe usage:
+
 ```powershell
 corepack yarn probe:udp <ip> 1234 3000
 ```
@@ -175,6 +192,7 @@ corepack yarn probe:udp <ip> 1234 3000
 ---
 
 ### 0x0B – INFO (Read static info)
+
 Reads static amplifier information. Per PDF, response is 128 bytes made of four null‑terminated strings (max 31 chars + NUL) each, in this order:
 
 - Manufacturer (32 bytes)
@@ -186,6 +204,7 @@ Reads static amplifier information. Per PDF, response is 128 bytes made of four 
 - Response data: 128 bytes as above.
 
 Observed example:
+
 ```
 INFO decoded: {
   manufacturer: 'Powersoft',
@@ -196,6 +215,7 @@ INFO decoded: {
 ```
 
 Probe usage:
+
 ```powershell
 corepack yarn probe:udp <ip> 1234 3000 info
 ```
@@ -203,6 +223,7 @@ corepack yarn probe:udp <ip> 1234 3000 info
 ---
 
 ### 0x01 – READGM (Read Gains & Mutes)
+
 Reads per‑channel input/output gains (centi‑dB) and mute states.
 
 - Request data: none (`count=0`).
@@ -216,6 +237,7 @@ Reads per‑channel input/output gains (centi‑dB) and mute states.
     - Output mute: 1 byte (0 = unmuted, 1 = muted)
 
 Example decoded on an 8‑channel unit:
+
 ```
 READGM decoded: { answer_ok: 1, num_channels: 8, dataLen: 52 }
   CH1: IN 0.00 dB UNMUTE | OUT 0.00 dB UNMUTE
@@ -229,6 +251,7 @@ READGM decoded: { answer_ok: 1, num_channels: 8, dataLen: 52 }
 ```
 
 Probe usage:
+
 ```powershell
 corepack yarn probe:udp <ip> 1234 3000 readgm
 ```
@@ -236,6 +259,7 @@ corepack yarn probe:udp <ip> 1234 3000 readgm
 ---
 
 ### 0x0E – STANDBY (Set/Read Standby)
+
 Set or read the amplifier standby state.
 
 - Request data (PDF): 4 bytes `[ON_OFF_READ, 0, 0, 0]`
@@ -247,15 +271,18 @@ Set or read the amplifier standby state.
   - `ON_OFF` = 2 → STANDBY OFF (operative), 1 → STANDBY ON (not operative)
 
 Important:
+
 - The spec requires CRC16 = 0 for this command, even though `count = 4`. Using a computed CRC causes the device to ignore the request. After forcing CRC16 to zero, devices reply as expected.
 
 Observed example (read):
+
 ```
 Data(hex): 01 01 00 00
 STANDBY decoded: { answer_ok: 1, onoff: 1, powerState: 'STANDBY (not operative)', dataLen: 4 }
 ```
 
 Observed example (read with ON_OFF=2):
+
 ```
 Data(hex): 01 02 00 00
 STANDBY decoded: { answer_ok: 1, onoff: 2, powerState: 'STANDBY OFF (operative)', dataLen: 4 }
@@ -264,6 +291,7 @@ STANDBY decoded: { answer_ok: 1, onoff: 2, powerState: 'STANDBY OFF (operative)'
 Status: On the tested unit, successful responses to read have been observed after forcing CRC16 to zero.
 
 - Probe usage (added options):
+
 ```powershell
 # Read (unicast)
 corepack yarn probe:udp <ip> 1234 3000 standby 0
@@ -286,6 +314,7 @@ corepack yarn probe:udp <ip> 1234 3000 standby 0
 ---
 
 ## Probe Script Reference
+
 - Script: `scripts/canali-udp-probe.mjs`
 - Key features:
   - Builds frames with correct CRC‑16/IBM and `~cmd` trailer.
@@ -293,6 +322,7 @@ corepack yarn probe:udp <ip> 1234 3000 standby 0
   - Pretty‑prints parsed headers and command‑specific decodes.
 
 Examples:
+
 ```powershell
 # PING
 yarn probe:udp <ip> 1234 3000
@@ -307,6 +337,7 @@ yarn probe:udp <ip> 1234 3000 standby 0
 ---
 
 ## Open Questions / To Validate
+
 - ALARMS/STATUS commands providing power/thermal/fault states.
 - Whether some commands require broadcast or `answer_port=0` on certain firmware.
 - Precise range/units for gains and any clipping/signal indicators over UDP.

@@ -10,13 +10,15 @@ Last updated: 2025-08-18
 - Ensure robust error handling, retries, and clear user-facing errors.
 
 ### In Scope (Phase 1)
+
 - Actions implemented in `src/actions.ts` (e.g., power, mute, gain, preset).
 - API client in `src/api.ts` with authentication/session and write/read helpers.
 - Config fields in `src/config.ts` (host, port, credentials, poll interval).
 - Variables/feedbacks in `src/variables.ts`, `src/feedbacks.ts` aligned to `docs/README.md`.
 
 ### Out of Scope (Initial)
-- Full parameter matrix coverage. 
+
+- Full parameter matrix coverage.
 - Advanced DSP features beyond the high-impact set.
 
 ## 2) Milestones

@@ -7,33 +7,39 @@ This module allows you to control and monitor Powersoft amplifiers via their net
 ## Configuration
 
 ### Network Settings
+
 - **Amplifier IP**: The IP address of your Powersoft amplifier
 - **Port**: The port for the API (default: 80 for HTTP, 443 for HTTPS)
 - **Update Frequency**: How often to poll the device for status updates (in milliseconds)
 
 ### Authentication
+
 - **Username**: Authentication username (default: admin)
 - **Password**: Authentication password (if required)
 
 ## Available Actions
 
 ### Power Control
+
 - Power On
 - Power Off
 - Toggle Power
 
 ### Channel Control
+
 - Mute/Unmute Channel
 - Set Channel Gain
 - Select Preset
 
 ### System
+
 - Reboot Device
 - Factory Reset (use with caution)
 
 ## Available Variables
 
 ### System
+
 - Device Model
 - Firmware Version
 - IP Address
@@ -42,6 +48,7 @@ This module allows you to control and monitor Powersoft amplifiers via their net
 - Uptime
 
 ### Channel Status
+
 - Channel Name
 - Mute Status
 - Gain Level
