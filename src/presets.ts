@@ -17,10 +17,10 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 				category: `${channelName} Mute`,
 				name: `${channelName} Mute Toggle`,
 				style: {
-					text: `${channelName}\\nMUTE TOGGLE`,
+					text: `${channelName}\\nUNMUTED`,
 					size: 'auto',
 					color: combineRgb(255, 255, 255),
-					bgcolor: combineRgb(100, 0, 0), // Dark red
+					bgcolor: combineRgb(0, 120, 0), // Green when unmuted
 				},
 				steps: [
 					{
@@ -44,7 +44,8 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 							channel: channel,
 						},
 						style: {
-							bgcolor: combineRgb(200, 0, 0), // Bright red when muted
+							text: `${channelName}\\nMUTED`,
+							bgcolor: combineRgb(200, 0, 0), // Red when muted
 							color: combineRgb(255, 255, 255),
 						},
 					},

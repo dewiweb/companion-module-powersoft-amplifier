@@ -113,7 +113,7 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 
 		// Channel Mute Feedback (always available)
 		channelMute: {
-			type: 'advanced',
+			type: 'boolean',
 			name: 'Channel Mute State',
 			description: 'Indicates if a specific channel is muted',
 			defaultStyle: {
