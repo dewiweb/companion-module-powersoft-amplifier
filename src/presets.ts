@@ -109,6 +109,62 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 				feedbacks: [],
 			},
 
+			// Gain Setpoints (absolute)
+			[`gain_set_m10_ch${channel}`]: {
+				type: 'button',
+				category: `${channelName} Gain`,
+				name: `${channelName} Gain -10 dB`,
+				style: {
+					text: `${channelName}\\nSET -10dB`,
+					size: 'auto',
+					color: combineRgb(0, 0, 0),
+					bgcolor: combineRgb(180, 200, 255),
+				},
+				steps: [
+					{
+						down: [{ actionId: 'setChannelGain', options: { device: defaultDevice, channel, gain: -10 } }],
+						up: [],
+					},
+				],
+				feedbacks: [],
+			},
+			[`gain_set_0_ch${channel}`]: {
+				type: 'button',
+				category: `${channelName} Gain`,
+				name: `${channelName} Gain 0 dB`,
+				style: {
+					text: `${channelName}\\nSET 0dB`,
+					size: 'auto',
+					color: combineRgb(0, 0, 0),
+					bgcolor: combineRgb(200, 255, 200),
+				},
+				steps: [
+					{
+						down: [{ actionId: 'setChannelGain', options: { device: defaultDevice, channel, gain: 0 } }],
+						up: [],
+					},
+				],
+				feedbacks: [],
+			},
+			[`gain_set_p5_ch${channel}`]: {
+				type: 'button',
+				category: `${channelName} Gain`,
+				name: `${channelName} Gain +5 dB`,
+				style: {
+					text: `${channelName}\\nSET +5dB`,
+					size: 'auto',
+					color: combineRgb(0, 0, 0),
+					bgcolor: combineRgb(255, 230, 180),
+				},
+				steps: [
+					{
+						down: [{ actionId: 'setChannelGain', options: { device: defaultDevice, channel, gain: 5 } }],
+						up: [],
+					},
+				],
+				feedbacks: [],
+			},
+
 			// Clip Indicator
 			[`clip_indicator_ch${channel}`]: {
 				type: 'button',
@@ -135,6 +191,161 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 					},
 				],
 			},
+
+			// Diagnostics: Tone Generator Start
+			[`diag_tone_start_ch${channel}`]: {
+				type: 'button',
+				category: `${channelName} Diagnostics`,
+				name: `${channelName} Tone Start`,
+				style: {
+					text: `${channelName}\\nTONE ON`,
+					size: 'auto',
+					color: combineRgb(255, 255, 255),
+					bgcolor: combineRgb(0, 100, 0),
+				},
+				steps: [
+					{
+						down: [
+							{
+								actionId: 'startOutputToneGenerator',
+								options: { device: defaultDevice, channel, frequency: 1000, level: -20 },
+							},
+						],
+						up: [],
+					},
+				],
+				feedbacks: [],
+			},
+
+			// Diagnostics: Tone Generator Stop
+			[`diag_tone_stop_ch${channel}`]: {
+				type: 'button',
+				category: `${channelName} Diagnostics`,
+				name: `${channelName} Tone Stop`,
+				style: {
+					text: `${channelName}\\nTONE OFF`,
+					size: 'auto',
+					color: combineRgb(255, 255, 255),
+					bgcolor: combineRgb(120, 0, 0),
+				},
+				steps: [
+					{
+						down: [{ actionId: 'stopOutputToneGenerator', options: { device: defaultDevice, channel } }],
+						up: [],
+					},
+				],
+				feedbacks: [],
+			},
+
+			// Diagnostics: Impedance Measure Start
+			[`diag_imp_start_ch${channel}`]: {
+				type: 'button',
+				category: `${channelName} Diagnostics`,
+				name: `${channelName} Impedance Start`,
+				style: {
+					text: `${channelName}\\nIMP ON`,
+					size: 'auto',
+					color: combineRgb(0, 0, 0),
+					bgcolor: combineRgb(255, 215, 0),
+				},
+				steps: [
+					{
+						down: [
+							{
+								actionId: 'startImpedanceMeasure',
+								options: { device: defaultDevice, channel, frequency: 1000, min: -30, max: -10 },
+							},
+						],
+						up: [],
+					},
+				],
+				feedbacks: [],
+			},
+
+			// Diagnostics: Impedance Measure Stop
+			[`diag_imp_stop_ch${channel}`]: {
+				type: 'button',
+				category: `${channelName} Diagnostics`,
+				name: `${channelName} Impedance Stop`,
+				style: {
+					text: `${channelName}\\nIMP OFF`,
+					size: 'auto',
+					color: combineRgb(255, 255, 255),
+					bgcolor: combineRgb(128, 128, 0),
+				},
+				steps: [
+					{
+						down: [{ actionId: 'stopImpedanceMeasure', options: { device: defaultDevice, channel } }],
+						up: [],
+					},
+				],
+				feedbacks: [],
+			},
+
+			// Diagnostics: Tone Detection Enable
+			[`diag_det_enable_ch${channel}`]: {
+				type: 'button',
+				category: `${channelName} Diagnostics`,
+				name: `${channelName} Detection Enable`,
+				style: {
+					text: `${channelName}\\nDETECT ON`,
+					size: 'auto',
+					color: combineRgb(255, 255, 255),
+					bgcolor: combineRgb(0, 80, 160),
+				},
+				steps: [
+					{
+						down: [
+							{
+								actionId: 'enableToneDetection',
+								options: { device: defaultDevice, channel, frequency: 1000, min: -40, max: -10 },
+							},
+						],
+						up: [],
+					},
+				],
+				feedbacks: [],
+			},
+
+			// Diagnostics: Tone Detection Disable
+			[`diag_det_disable_ch${channel}`]: {
+				type: 'button',
+				category: `${channelName} Diagnostics`,
+				name: `${channelName} Detection Disable`,
+				style: {
+					text: `${channelName}\\nDETECT OFF`,
+					size: 'auto',
+					color: combineRgb(255, 255, 255),
+					bgcolor: combineRgb(80, 80, 80),
+				},
+				steps: [
+					{
+						down: [{ actionId: 'disableToneDetection', options: { device: defaultDevice, channel } }],
+						up: [],
+					},
+				],
+				feedbacks: [],
+			},
+
+			// Diagnostics: Stop All on Channel
+			[`diag_stop_all_ch${channel}`]: {
+				type: 'button',
+				category: `${channelName} Diagnostics`,
+				name: `${channelName} Stop All`,
+				style: {
+					text: `${channelName}\\nSTOP ALL`,
+					size: 'auto',
+					color: combineRgb(255, 255, 255),
+					bgcolor: combineRgb(160, 0, 0),
+				},
+				steps: [
+					{
+						down: [{ actionId: 'stopAllDiagnostics', options: { device: defaultDevice, channel } }],
+						up: [],
+					},
+				],
+				feedbacks: [],
+			},
 		}
 	}
 
@@ -159,14 +370,7 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 			},
 			steps: [
 				{
-					down: [
-						{
-							actionId: 'powerOn',
-							options: {
-								device: defaultDevice,
-							},
-						},
-					],
+					down: [{ actionId: 'powerOn', options: { device: defaultDevice } }],
 					up: [],
 				},
 			],
@@ -193,14 +397,7 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 			},
 			steps: [
 				{
-					down: [
-						{
-							actionId: 'powerOff',
-							options: {
-								device: defaultDevice,
-							},
-						},
-					],
+					down: [{ actionId: 'powerOff', options: { device: defaultDevice } }],
 					up: [],
 				},
 			],
@@ -218,14 +415,7 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 			},
 			steps: [
 				{
-					down: [
-						{
-							actionId: 'togglePower',
-							options: {
-								device: defaultDevice,
-							},
-						},
-					],
+					down: [{ actionId: 'togglePower', options: { device: defaultDevice } }],
 					up: [],
 				},
 			],
@@ -245,15 +435,7 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 			},
 			steps: [
 				{
-					down: [
-						{
-							actionId: 'resetProtection',
-							options: {
-								device: defaultDevice,
-								channel: 0, // 0 means all channels
-							},
-						},
-					],
+					down: [{ actionId: 'resetProtection', options: { device: defaultDevice, channel: 0 } }],
 					up: [],
 				},
 			],
@@ -273,15 +455,7 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 			},
 			steps: [
 				{
-					down: [
-						{
-							actionId: 'resetPeakHold',
-							options: {
-								device: defaultDevice,
-								channel: 0, // 0 means all channels
-							},
-						},
-					],
+					down: [{ actionId: 'resetPeakHold', options: { device: defaultDevice, channel: 0 } }],
 					up: [],
 				},
 			],
@@ -301,16 +475,10 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 			},
 			steps: [
 				{
-					down: [
-						// One mute action per channel targeting default device
-						...Array.from({ length: maxChannels }, (_, i) => ({
-							actionId: 'muteChannel' as const,
-							options: {
-								device: defaultDevice,
-								channel: i + 1,
-							},
-						})),
-					],
+					down: Array.from({ length: maxChannels }, (_, i) => ({
+						actionId: 'muteChannel',
+						options: { device: defaultDevice, channel: i + 1 },
+					})),
 					up: [],
 				},
 			],
@@ -328,15 +496,30 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 			},
 			steps: [
 				{
-					down: [
-						...Array.from({ length: maxChannels }, (_, i) => ({
-							actionId: 'unmuteChannel' as const,
-							options: {
-								device: defaultDevice,
-								channel: i + 1,
-							},
-						})),
-					],
+					down: Array.from({ length: maxChannels }, (_, i) => ({
+						actionId: 'unmuteChannel',
+						options: { device: defaultDevice, channel: i + 1 },
+					})),
+					up: [],
+				},
+			],
+			feedbacks: [],
+		},
+
+		// Diagnostics: Stop All (All Channels)
+		stop_all_diagnostics_all: {
+			type: 'button',
+			category: 'Diagnostics',
+			name: 'Diagnostics Stop All (All CH)',
+			style: {
+				text: 'DIAG\\nSTOP ALL',
+				size: 'auto',
+				color: combineRgb(255, 255, 255),
+				bgcolor: combineRgb(100, 0, 0),
+			},
+			steps: [
+				{
+					down: [{ actionId: 'stopAllDiagnosticsAllChannels', options: { device: defaultDevice } }],
 					up: [],
 				},
 			],

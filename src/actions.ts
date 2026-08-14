@@ -20,6 +20,7 @@ async function postToAmplifier(url: string, payload: any, self: ModuleInstance) 
 			json: payload,
 			responseType: 'json',
 			timeout: { request: 5000 },
+			retry: { limit: 0 }, // Do not retry: a dead device would otherwise hang for 15s+ per write
 			https: { rejectUnauthorized: false }, // Some devices may use self-signed certs
 		})
 		self.log('debug', `Response ${res.statusCode}: ${JSON.stringify(res.body)}`)
@@ -35,12 +36,45 @@ export function UpdateActions(self: ModuleInstance): void {
 	const deviceChoices = (): { id: string; label: string }[] => {
 		const hosts = listDevices(self.config)
 		const arr = hosts.length > 0 ? hosts : self.config.host ? [self.config.host] : []
-		return arr.map((h) => ({ id: h, label: h }))
+		const list = arr.map((h) => ({ id: h, label: h }))
+		// Add special all-devices option when more than one device is configured
+		return list.length > 1 ? [{ id: '__all__', label: 'All Devices' }, ...list] : list
 	}
+	// Resolve a single URL for legacy single-device actions
 	const resolveUrl = (selected?: string): string => {
 		const host =
-			selected && String(selected).length > 0 ? String(selected) : listDevices(self.config)[0] || self.config.host
+			selected && String(selected).length > 0 && selected !== '__all__'
+				? String(selected)
+				: listDevices(self.config)[0] || self.config.host
 		return getAmplifierApiUrl(host, self.config.useHttps, self.config.port)
+	}
+	// Resolve one or many hosts depending on selection
+	const resolveHosts = (selected?: string): string[] => {
+		if (selected === '__all__') return listDevices(self.config)
+		const host =
+			selected && String(selected).length > 0 ? String(selected) : listDevices(self.config)[0] || self.config.host
+		return host ? [host] : []
+	}
+	// Post to a host, swallowing per-host errors so one dead amplifier does not
+	// reject the whole action (which would surface as an unhandled rejection in
+	// Companion). Errors are logged and the loop continues to the next host.
+	const postToHostSafe = async (host: string, payload: any) => {
+		const url = getAmplifierApiUrl(host, self.config.useHttps, self.config.port)
+		try {
+			await postToAmplifier(url, payload, self)
+		} catch (e: any) {
+			self.log('warn', `Action failed for ${host}: ${e?.message || e}`)
+		}
+	}
+	// Post to a resolved URL, swallowing errors for the same reason as postToHostSafe.
+	// The optional third argument is accepted for call-site compatibility with the
+	// previous postToAmplifier(url, payload, self) signature and is ignored.
+	const postToUrlSafe = async (url: string, payload: any, _self?: unknown) => {
+		try {
+			await postToAmplifier(url, payload, self)
+		} catch (e: any) {
+			self.log('warn', `Action failed for ${url}: ${e?.message || e}`)
+		}
 	}
 	self.setActionDefinitions({
 		// Power Control
@@ -57,14 +91,16 @@ export function UpdateActions(self: ModuleInstance): void {
 				},
 			],
 			callback: async (action) => {
-				const url = resolveUrl(action.options.device as string)
+				const hosts = resolveHosts(action.options.device as string)
 				const payload = buildAgileRequest({
 					actionType: ActionType.WRITE,
 					valueType: ValueType.BOOL,
 					path: ParameterPaths.DEVICE_STANDBY,
 					value: false, // Standby OFF = Power ON
 				})
-				await postToAmplifier(url, payload, self)
+				for (const host of hosts) {
+					await postToHostSafe(host, payload)
+				}
 			},
 		},
 		powerOff: {
@@ -79,14 +115,16 @@ export function UpdateActions(self: ModuleInstance): void {
 				},
 			],
 			callback: async (action) => {
-				const url = resolveUrl(action.options.device as string)
+				const hosts = resolveHosts(action.options.device as string)
 				const payload = buildAgileRequest({
 					actionType: ActionType.WRITE,
 					valueType: ValueType.BOOL,
 					path: ParameterPaths.DEVICE_STANDBY,
 					value: true, // Standby ON = Power OFF
 				})
-				await postToAmplifier(url, payload, self)
+				for (const host of hosts) {
+					await postToHostSafe(host, payload)
+				}
 			},
 		},
 		togglePower: {
@@ -101,17 +139,19 @@ export function UpdateActions(self: ModuleInstance): void {
 				},
 			],
 			callback: async (action) => {
-				const host = (action.options.device as string) || listDevices(self.config)[0] || self.config.host
-				const id = sanitizeDeviceId(host || '')
-				const current = self.deviceStatusById[id]?.power === true
-				const url = resolveUrl(host)
-				const payload = buildAgileRequest({
-					actionType: ActionType.WRITE,
-					valueType: ValueType.BOOL,
-					path: ParameterPaths.DEVICE_STANDBY,
-					value: current ? true : false, // if currently ON -> standby true (turn off), else standby false (turn on)
-				})
-				await postToAmplifier(url, payload, self)
+				const selected = action.options.device as string
+				const hosts = resolveHosts(selected)
+				for (const host of hosts) {
+					const id = sanitizeDeviceId(host || '')
+					const current = self.deviceStatusById[id]?.power === true
+					const payload = buildAgileRequest({
+						actionType: ActionType.WRITE,
+						valueType: ValueType.BOOL,
+						path: ParameterPaths.DEVICE_STANDBY,
+						value: current ? true : false, // if currently ON -> standby true (turn off), else standby false (turn on)
+					})
+					await postToHostSafe(host, payload)
+				}
 			},
 		},
 
@@ -139,7 +179,6 @@ export function UpdateActions(self: ModuleInstance): void {
 			],
 			callback: async (action) => {
 				const channel = (action.options.channel as number) - 1
-				const url = resolveUrl(action.options.device as string)
 				const path = ParameterPaths.INPUT_CHANNEL_MUTE.replace('{0}', String(channel))
 				const payload = buildAgileRequest({
 					actionType: ActionType.WRITE,
@@ -147,7 +186,10 @@ export function UpdateActions(self: ModuleInstance): void {
 					path,
 					value: true,
 				})
-				await postToAmplifier(url, payload, self)
+				const hosts = resolveHosts(action.options.device as string)
+				for (const host of hosts) {
+					await postToHostSafe(host, payload)
+				}
 			},
 		},
 		unmuteChannel: {
@@ -173,7 +215,6 @@ export function UpdateActions(self: ModuleInstance): void {
 			],
 			callback: async (action) => {
 				const channel = (action.options.channel as number) - 1
-				const url = resolveUrl(action.options.device as string)
 				const path = ParameterPaths.INPUT_CHANNEL_MUTE.replace('{0}', String(channel))
 				const payload = buildAgileRequest({
 					actionType: ActionType.WRITE,
@@ -181,7 +222,10 @@ export function UpdateActions(self: ModuleInstance): void {
 					path,
 					value: false,
 				})
-				await postToAmplifier(url, payload, self)
+				const hosts = resolveHosts(action.options.device as string)
+				for (const host of hosts) {
+					await postToHostSafe(host, payload)
+				}
 			},
 		},
 		toggleMuteChannel: {
@@ -206,19 +250,21 @@ export function UpdateActions(self: ModuleInstance): void {
 				},
 			],
 			callback: async (action) => {
-				const host = (action.options.device as string) || listDevices(self.config)[0] || self.config.host
-				const id = sanitizeDeviceId(host || '')
+				const selected = action.options.device as string
 				const ch = (action.options.channel as number) - 1
-				const current = self.deviceStatusById[id]?.channels?.[ch]?.mute === true
-				const url = resolveUrl(host)
 				const path = ParameterPaths.INPUT_CHANNEL_MUTE.replace('{0}', String(ch))
-				const payload = buildAgileRequest({
-					actionType: ActionType.WRITE,
-					valueType: ValueType.BOOL,
-					path,
-					value: !current,
-				})
-				await postToAmplifier(url, payload, self)
+				const hosts = resolveHosts(selected)
+				for (const host of hosts) {
+					const id = sanitizeDeviceId(host || '')
+					const current = self.deviceStatusById[id]?.channels?.[ch]?.mute === true
+					const payload = buildAgileRequest({
+						actionType: ActionType.WRITE,
+						valueType: ValueType.BOOL,
+						path,
+						value: !current,
+					})
+					await postToHostSafe(host, payload)
+				}
 			},
 		},
 
@@ -256,17 +302,19 @@ export function UpdateActions(self: ModuleInstance): void {
 				},
 			],
 			callback: async (action) => {
-				const gain = parseFloat(action.options.gain as string)
+				const gainDb = parseFloat(action.options.gain as string)
 				const url = resolveUrl(action.options.device as string)
 				// Use channel value directly in the path replacement
 				const path = ParameterPaths.INPUT_CHANNEL_GAIN.replace('{0}', String((action.options.channel as number) - 1))
+				// HTTP API appears to return linear gain for this path, so convert dB -> linear for writes
+				const lin = Math.pow(10, Math.max(-80, Math.min(80, gainDb)) / 20)
 				const payload = buildAgileRequest({
 					actionType: ActionType.WRITE,
 					valueType: ValueType.FLOAT,
 					path,
-					value: gain,
+					value: lin,
 				})
-				await postToAmplifier(url, payload, self)
+				await postToUrlSafe(url, payload, self)
 			},
 		},
 
@@ -307,22 +355,24 @@ export function UpdateActions(self: ModuleInstance): void {
 				const id = sanitizeDeviceId(host || '')
 				const ch = (action.options.channel as number) - 1
 				const delta = parseFloat(action.options.adjustment as string)
-				const current = self.deviceStatusById[id]?.channels?.[ch]?.gain
-				if (typeof current !== 'number') {
+				const currentDb = self.deviceStatusById[id]?.channels?.[ch]?.gain
+				if (typeof currentDb !== 'number') {
 					self.log('warn', 'Adjust Gain: current gain unknown; cannot apply relative change')
 					return
 				}
 				const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
-				const newGain = clamp(current + delta, -60, 20)
+				const newGainDb = clamp(currentDb + delta, -60, 20)
 				const url = resolveUrl(host)
 				const path = ParameterPaths.INPUT_CHANNEL_GAIN.replace('{0}', String(ch))
+				// Convert dB to linear for HTTP write
+				const lin = Math.pow(10, newGainDb / 20)
 				const payload = buildAgileRequest({
 					actionType: ActionType.WRITE,
 					valueType: ValueType.FLOAT,
 					path,
-					value: newGain,
+					value: lin,
 				})
-				await postToAmplifier(url, payload, self)
+				await postToUrlSafe(url, payload, self)
 			},
 		},
 
@@ -399,6 +449,397 @@ export function UpdateActions(self: ModuleInstance): void {
 			callback: async () => {
 				// Not implemented: would require correct parameter path and type
 				self.log('warn', 'Reset Peak Hold: implement with correct ParameterPaths and types.')
+			},
+		},
+
+		// Diagnostics: Output Tone Generator
+		startOutputToneGenerator: {
+			name: 'Diagnostics: Start Tone Generator',
+			options: [
+				{ type: 'dropdown', id: 'device', label: 'Device', default: deviceChoices()[0]?.id, choices: deviceChoices() },
+				{
+					type: 'dropdown',
+					label: 'Output Channel',
+					id: 'channel',
+					default: 1,
+					choices: Array.from({ length: self.config.maxChannels || 8 }, (_, i) => ({
+						id: i + 1,
+						label: `CH ${i + 1}`,
+					})),
+				},
+				{ type: 'number', id: 'frequency', label: 'Frequency (Hz)', default: 1000, min: 10, max: 20000, step: 1 },
+				{ type: 'number', id: 'level', label: 'Level (V or dBFS)', default: -20, min: -60, max: 0, step: 1 },
+			],
+			callback: async (action) => {
+				const url = resolveUrl(action.options.device as string)
+				const ch = (action.options.channel as number) - 1
+				const freqPath = ParameterPaths.OUTPUT_SPEAKER_GENERATOR_FREQUENCY.replace('{0}', String(ch))
+				const lvlPath = ParameterPaths.OUTPUT_SPEAKER_GENERATOR_VOLTAGE.replace('{0}', String(ch))
+				const enPath = ParameterPaths.OUTPUT_SPEAKER_GENERATOR_ENABLE.replace('{0}', String(ch))
+				const freq = Number(action.options.frequency)
+				const level = Number(action.options.level)
+				await postToUrlSafe(
+					url,
+					buildAgileRequest({
+						actionType: ActionType.WRITE,
+						valueType: ValueType.FLOAT,
+						path: freqPath,
+						value: freq,
+					}),
+					self,
+				)
+				await postToUrlSafe(
+					url,
+					buildAgileRequest({
+						actionType: ActionType.WRITE,
+						valueType: ValueType.FLOAT,
+						path: lvlPath,
+						value: level,
+					}),
+					self,
+				)
+				await postToUrlSafe(
+					url,
+					buildAgileRequest({
+						actionType: ActionType.WRITE,
+						valueType: ValueType.BOOL,
+						path: enPath,
+						value: true,
+					}),
+					self,
+				)
+			},
+		},
+		stopOutputToneGenerator: {
+			name: 'Diagnostics: Stop Tone Generator',
+			options: [
+				{ type: 'dropdown', id: 'device', label: 'Device', default: deviceChoices()[0]?.id, choices: deviceChoices() },
+				{
+					type: 'dropdown',
+					label: 'Output Channel',
+					id: 'channel',
+					default: 1,
+					choices: Array.from({ length: self.config.maxChannels || 8 }, (_, i) => ({
+						id: i + 1,
+						label: `CH ${i + 1}`,
+					})),
+				},
+			],
+			callback: async (action) => {
+				const url = resolveUrl(action.options.device as string)
+				const ch = (action.options.channel as number) - 1
+				const enPath = ParameterPaths.OUTPUT_SPEAKER_GENERATOR_ENABLE.replace('{0}', String(ch))
+				await postToUrlSafe(
+					url,
+					buildAgileRequest({
+						actionType: ActionType.WRITE,
+						valueType: ValueType.BOOL,
+						path: enPath,
+						value: false,
+					}),
+					self,
+				)
+			},
+		},
+
+		// Diagnostics: Output Impedance Measurement
+		startImpedanceMeasure: {
+			name: 'Diagnostics: Start Impedance Measure',
+			options: [
+				{ type: 'dropdown', id: 'device', label: 'Device', default: deviceChoices()[0]?.id, choices: deviceChoices() },
+				{
+					type: 'dropdown',
+					label: 'Output Channel',
+					id: 'channel',
+					default: 1,
+					choices: Array.from({ length: self.config.maxChannels || 8 }, (_, i) => ({
+						id: i + 1,
+						label: `CH ${i + 1}`,
+					})),
+				},
+				{ type: 'number', id: 'frequency', label: 'Frequency (Hz)', default: 1000, min: 10, max: 20000, step: 1 },
+				{ type: 'number', id: 'min', label: 'Min Level', default: -30, min: -60, max: 0, step: 1 },
+				{ type: 'number', id: 'max', label: 'Max Level', default: -10, min: -60, max: 0, step: 1 },
+			],
+			callback: async (action) => {
+				const url = resolveUrl(action.options.device as string)
+				const ch = (action.options.channel as number) - 1
+				const fPath = ParameterPaths.OUTPUT_SPEAKER_IMPEDANCE_DETECTION_FREQUENCY.replace('{0}', String(ch))
+				const minPath = ParameterPaths.OUTPUT_SPEAKER_IMPEDANCE_DETECTION_MIN_V.replace('{0}', String(ch))
+				const maxPath = ParameterPaths.OUTPUT_SPEAKER_IMPEDANCE_DETECTION_MAX_V.replace('{0}', String(ch))
+				const enPath = ParameterPaths.OUTPUT_SPEAKER_IMPEDANCE_DETECTION_ENABLE.replace('{0}', String(ch))
+				await postToUrlSafe(
+					url,
+					buildAgileRequest({
+						actionType: ActionType.WRITE,
+						valueType: ValueType.FLOAT,
+						path: fPath,
+						value: Number(action.options.frequency),
+					}),
+					self,
+				)
+				await postToUrlSafe(
+					url,
+					buildAgileRequest({
+						actionType: ActionType.WRITE,
+						valueType: ValueType.FLOAT,
+						path: minPath,
+						value: Number(action.options.min),
+					}),
+					self,
+				)
+				await postToUrlSafe(
+					url,
+					buildAgileRequest({
+						actionType: ActionType.WRITE,
+						valueType: ValueType.FLOAT,
+						path: maxPath,
+						value: Number(action.options.max),
+					}),
+					self,
+				)
+				await postToUrlSafe(
+					url,
+					buildAgileRequest({
+						actionType: ActionType.WRITE,
+						valueType: ValueType.BOOL,
+						path: enPath,
+						value: true,
+					}),
+					self,
+				)
+			},
+		},
+		stopImpedanceMeasure: {
+			name: 'Diagnostics: Stop Impedance Measure',
+			options: [
+				{ type: 'dropdown', id: 'device', label: 'Device', default: deviceChoices()[0]?.id, choices: deviceChoices() },
+				{
+					type: 'dropdown',
+					label: 'Output Channel',
+					id: 'channel',
+					default: 1,
+					choices: Array.from({ length: self.config.maxChannels || 8 }, (_, i) => ({
+						id: i + 1,
+						label: `CH ${i + 1}`,
+					})),
+				},
+			],
+			callback: async (action) => {
+				const url = resolveUrl(action.options.device as string)
+				const ch = (action.options.channel as number) - 1
+				const enPath = ParameterPaths.OUTPUT_SPEAKER_IMPEDANCE_DETECTION_ENABLE.replace('{0}', String(ch))
+				await postToUrlSafe(
+					url,
+					buildAgileRequest({
+						actionType: ActionType.WRITE,
+						valueType: ValueType.BOOL,
+						path: enPath,
+						value: false,
+					}),
+					self,
+				)
+			},
+		},
+
+		// Diagnostics: Output Tone Detection
+		enableToneDetection: {
+			name: 'Diagnostics: Enable Tone Detection',
+			options: [
+				{ type: 'dropdown', id: 'device', label: 'Device', default: deviceChoices()[0]?.id, choices: deviceChoices() },
+				{
+					type: 'dropdown',
+					label: 'Output Channel',
+					id: 'channel',
+					default: 1,
+					choices: Array.from({ length: self.config.maxChannels || 8 }, (_, i) => ({
+						id: i + 1,
+						label: `CH ${i + 1}`,
+					})),
+				},
+				{ type: 'number', id: 'frequency', label: 'Frequency (Hz)', default: 1000, min: 10, max: 20000, step: 1 },
+				{ type: 'number', id: 'min', label: 'Min Threshold', default: -40, min: -80, max: 0, step: 1 },
+				{ type: 'number', id: 'max', label: 'Max Threshold', default: -10, min: -80, max: 0, step: 1 },
+			],
+			callback: async (action) => {
+				const url = resolveUrl(action.options.device as string)
+				const ch = (action.options.channel as number) - 1
+				const fPath = ParameterPaths.OUTPUT_SPEAKER_TONE_DETECTION_FREQUENCY.replace('{0}', String(ch))
+				const minPath = ParameterPaths.OUTPUT_SPEAKER_TONE_DETECTION_MIN_TH.replace('{0}', String(ch))
+				const maxPath = ParameterPaths.OUTPUT_SPEAKER_TONE_DETECTION_MAX_TH.replace('{0}', String(ch))
+				const enPath = ParameterPaths.OUTPUT_SPEAKER_TONE_DETECTION_ENABLE.replace('{0}', String(ch))
+				await postToUrlSafe(
+					url,
+					buildAgileRequest({
+						actionType: ActionType.WRITE,
+						valueType: ValueType.FLOAT,
+						path: fPath,
+						value: Number(action.options.frequency),
+					}),
+					self,
+				)
+				await postToUrlSafe(
+					url,
+					buildAgileRequest({
+						actionType: ActionType.WRITE,
+						valueType: ValueType.FLOAT,
+						path: minPath,
+						value: Number(action.options.min),
+					}),
+					self,
+				)
+				await postToUrlSafe(
+					url,
+					buildAgileRequest({
+						actionType: ActionType.WRITE,
+						valueType: ValueType.FLOAT,
+						path: maxPath,
+						value: Number(action.options.max),
+					}),
+					self,
+				)
+				await postToUrlSafe(
+					url,
+					buildAgileRequest({
+						actionType: ActionType.WRITE,
+						valueType: ValueType.BOOL,
+						path: enPath,
+						value: true,
+					}),
+					self,
+				)
+			},
+		},
+		disableToneDetection: {
+			name: 'Diagnostics: Disable Tone Detection',
+			options: [
+				{ type: 'dropdown', id: 'device', label: 'Device', default: deviceChoices()[0]?.id, choices: deviceChoices() },
+				{
+					type: 'dropdown',
+					label: 'Output Channel',
+					id: 'channel',
+					default: 1,
+					choices: Array.from({ length: self.config.maxChannels || 8 }, (_, i) => ({
+						id: i + 1,
+						label: `CH ${i + 1}`,
+					})),
+				},
+			],
+			callback: async (action) => {
+				const url = resolveUrl(action.options.device as string)
+				const ch = (action.options.channel as number) - 1
+				const enPath = ParameterPaths.OUTPUT_SPEAKER_TONE_DETECTION_ENABLE.replace('{0}', String(ch))
+				await postToUrlSafe(
+					url,
+					buildAgileRequest({
+						actionType: ActionType.WRITE,
+						valueType: ValueType.BOOL,
+						path: enPath,
+						value: false,
+					}),
+					self,
+				)
+			},
+		},
+
+		// Diagnostics: Stop All (per channel)
+		stopAllDiagnostics: {
+			name: 'Diagnostics: Stop All (Channel)',
+			options: [
+				{ type: 'dropdown', id: 'device', label: 'Device', default: deviceChoices()[0]?.id, choices: deviceChoices() },
+				{
+					type: 'dropdown',
+					label: 'Output Channel',
+					id: 'channel',
+					default: 1,
+					choices: Array.from({ length: self.config.maxChannels || 8 }, (_, i) => ({
+						id: i + 1,
+						label: `CH ${i + 1}`,
+					})),
+				},
+			],
+			callback: async (action) => {
+				const url = resolveUrl(action.options.device as string)
+				const ch = (action.options.channel as number) - 1
+				const gen = ParameterPaths.OUTPUT_SPEAKER_GENERATOR_ENABLE.replace('{0}', String(ch))
+				const imp = ParameterPaths.OUTPUT_SPEAKER_IMPEDANCE_DETECTION_ENABLE.replace('{0}', String(ch))
+				const det = ParameterPaths.OUTPUT_SPEAKER_TONE_DETECTION_ENABLE.replace('{0}', String(ch))
+				await postToUrlSafe(
+					url,
+					buildAgileRequest({
+						actionType: ActionType.WRITE,
+						valueType: ValueType.BOOL,
+						path: gen,
+						value: false,
+					}),
+					self,
+				)
+				await postToUrlSafe(
+					url,
+					buildAgileRequest({
+						actionType: ActionType.WRITE,
+						valueType: ValueType.BOOL,
+						path: imp,
+						value: false,
+					}),
+					self,
+				)
+				await postToUrlSafe(
+					url,
+					buildAgileRequest({
+						actionType: ActionType.WRITE,
+						valueType: ValueType.BOOL,
+						path: det,
+						value: false,
+					}),
+					self,
+				)
+			},
+		},
+
+		// Diagnostics: Stop All (all channels on device)
+		stopAllDiagnosticsAllChannels: {
+			name: 'Diagnostics: Stop All (All Channels)',
+			options: [
+				{ type: 'dropdown', id: 'device', label: 'Device', default: deviceChoices()[0]?.id, choices: deviceChoices() },
+			],
+			callback: async (action) => {
+				const hosts = resolveHosts(action.options.device as string)
+				const maxCh = self.config.maxChannels || 8
+				for (const host of hosts) {
+					for (let ch = 0; ch < maxCh; ch++) {
+						const gen = ParameterPaths.OUTPUT_SPEAKER_GENERATOR_ENABLE.replace('{0}', String(ch))
+						const imp = ParameterPaths.OUTPUT_SPEAKER_IMPEDANCE_DETECTION_ENABLE.replace('{0}', String(ch))
+						const det = ParameterPaths.OUTPUT_SPEAKER_TONE_DETECTION_ENABLE.replace('{0}', String(ch))
+						await postToHostSafe(
+							host,
+							buildAgileRequest({
+								actionType: ActionType.WRITE,
+								valueType: ValueType.BOOL,
+								path: gen,
+								value: false,
+							}),
+						)
+						await postToHostSafe(
+							host,
+							buildAgileRequest({
+								actionType: ActionType.WRITE,
+								valueType: ValueType.BOOL,
+								path: imp,
+								value: false,
+							}),
+						)
+						await postToHostSafe(
+							host,
+							buildAgileRequest({
+								actionType: ActionType.WRITE,
+								valueType: ValueType.BOOL,
+								path: det,
+								value: false,
+							}),
+						)
+					}
+				}
 			},
 		},
 	})

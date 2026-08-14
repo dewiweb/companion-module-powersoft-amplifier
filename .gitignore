@@ -9,3 +9,8 @@ DEBUG-*
 /.yarn/install-state.gz
 /.idea
 .DS_Store
+itertools
+
+# Generated analysis/output artifacts
+scripts/out/
+scripts/out/**

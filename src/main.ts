@@ -20,6 +20,11 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 	// Per-device error handling/backoff
 	errorCountById: Record<string, number> = {}
 	backoffUntilById: Record<string, number> = {}
+	// Discovery state
+	FOUND_DEVICES: Record<string, any> = {}
+	SCANNING = false
+	discoverySocket?: any
+	_discoveryInterval?: NodeJS.Timeout | null
 
 	constructor(internal: unknown) {
 		super(internal)
@@ -28,11 +33,24 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 	async init(config: ModuleConfig): Promise<void> {
 		this.config = config
 		this.clearIntervals()
-		this.updateStatus(InstanceStatus.Ok)
+		// Discovery lifecycle
+		if (this.config.scan) {
+			const { startDiscovery } = await import('./discovery.js')
+			startDiscovery(this)
+		} else {
+			const { stopDiscovery } = await import('./discovery.js')
+			stopDiscovery(this)
+		}
+		// Always register UI elements
 		this.updateActions()
 		this.updateFeedbacks()
 		this.updateVariableDefinitions()
 		this.updatePresets()
+		// If config is not ready, set BadConfig and skip network/polling
+		if (!this.isConfigReady()) {
+			this.updateStatus(InstanceStatus.BadConfig, 'No device configured. Set Host or Devices IPs to start.')
+			return
+		}
 		// Seed state immediately so feedbacks/variables reflect current device state ASAP
 		await this.pollDeviceStatus()
 		UpdateVariables(this)
@@ -42,16 +60,57 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 
 	async destroy(): Promise<void> {
 		this.clearIntervals()
+		try {
+			const { stopDiscovery } = await import('./discovery.js')
+			stopDiscovery(this)
+		} catch (_e) {
+			// no-op
+		}
 		this.log('debug', 'destroy')
 	}
 
 	async configUpdated(config: ModuleConfig): Promise<void> {
 		this.config = config
 		this.clearIntervals()
+		// Map discovered device(s) -> host/devicesCsv when selected
+		if (this.config.scan && Array.isArray(this.config.deviceIds) && this.config.deviceIds.length > 0) {
+			const ids: string[] = this.config.deviceIds
+			const hosts: string[] = ids
+				.map((id) => this.FOUND_DEVICES?.[id]?.host)
+				.filter((v: any): v is string => typeof v === 'string' && v.length > 0)
+			if (this.config.mode === 'multi') {
+				const csv = hosts.join(', ')
+				if (csv !== (this.config.devicesCsv || '')) {
+					this.config.devicesCsv = csv
+					this.saveConfig(this.config)
+				}
+			} else {
+				const first = hosts[0]
+				if (first && this.config.host !== first) {
+					this.config.host = first
+					this.saveConfig(this.config)
+				}
+			}
+		}
+		// Discovery lifecycle
+		if (this.config.scan) {
+			const { startDiscovery } = await import('./discovery.js')
+			startDiscovery(this)
+		} else {
+			this.FOUND_DEVICES = {}
+			this.config.deviceIds = []
+			this.saveConfig(this.config)
+			const { stopDiscovery } = await import('./discovery.js')
+			stopDiscovery(this)
+		}
 		this.updateActions()
 		this.updateFeedbacks()
 		this.updateVariableDefinitions()
 		this.updatePresets()
+		if (!this.isConfigReady()) {
+			this.updateStatus(InstanceStatus.BadConfig, 'No device configured. Set Host or Devices IPs to start.')
+			return
+		}
 		await this.pollDeviceStatus()
 		UpdateVariables(this)
 		this.checkFeedbacks()
@@ -59,7 +118,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 	}
 
 	getConfigFields(): SomeCompanionConfigField[] {
-		return GetConfigFields()
+		return GetConfigFields(this as any)
 	}
 
 	updateActions(): void {
@@ -85,6 +144,13 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		this.setPresetDefinitions(presets as any)
 	}
 
+	private isConfigReady(): boolean {
+		const hostOk = typeof this.config?.host === 'string' && this.config.host.trim().length > 0
+		const devCsvOk =
+			typeof (this.config as any)?.devicesCsv === 'string' && (this.config as any).devicesCsv.trim().length > 0
+		return hostOk || devCsvOk
+	}
+
 	clearIntervals(): void {
 		if (this.pollingInterval) clearInterval(this.pollingInterval)
 		if (this.variableUpdateInterval) clearInterval(this.variableUpdateInterval)
@@ -97,6 +163,11 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 	startPolling(): void {
 		this.clearIntervals()
 		this.debugTick = 0
+		if (!this.isConfigReady()) {
+			// Keep module in BadConfig until user sets Host/Devices
+			this.updateStatus(InstanceStatus.BadConfig, 'No device configured. Set Host or Devices IPs to start.')
+			return
+		}
 		// Kick off an immediate poll rather than waiting for the first interval tick
 		void this.pollDeviceStatus()
 		if (this.config.enableUdpFeedback) {
@@ -140,19 +211,44 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		const deviceIps = listDevices(this.config)
 		const defaultHost = this.config.host
 
-		// Helper to perform a single read
-		const readValue = async (url: string, path: string, valueType: number) => {
+		// Default request timeout for regular reads. Discovery/probe reads use a shorter
+		// timeout to avoid blocking for minutes when a device is unreachable.
+		const readTimeout = Math.max(2000, this.config.pollingInterval ?? 1000)
+		const probeTimeout = Math.min(2000, Math.max(1000, ((this.config.pollingInterval ?? 1000) / 2) | 0))
+
+		// Helper to perform a single read.
+		// got retries are disabled (limit: 0) so a dead device fails fast instead of
+		// being retried 3x per request, which previously caused multi-minute hangs.
+		const readValue = async (url: string, path: string, valueType: number, timeoutMs: number = readTimeout) => {
 			const payload = buildAgileRequest({ actionType: ActionType.READ, valueType, path })
 			const res = await got.post(url, {
 				json: payload,
 				responseType: 'json',
-				timeout: { request: Math.max(2000, this.config.pollingInterval) },
+				timeout: { request: timeoutMs },
+				retry: { limit: 0 },
 				https: { rejectUnauthorized: false },
 			})
 			return parseReadResponse(res.body, valueType as any)
 		}
 
-		// Diagnostic helper for standby to capture raw response using preferred and fallback types
+		// Normalize gain to dB. Some HTTP paths return linear gain (V/V ~0..5.6), while UDP returns dB.
+		const normalizeGain = (val: unknown): number | undefined => {
+			if (typeof val !== 'number' || !isFinite(val)) return undefined
+			const n = val
+			// Heuristic:
+			// - If value is negative or > 10, assume it's already dB.
+			// - If value is between 0 and 10, assume linear and convert to dB.
+			if (n < 0 || n > 10) {
+				return Math.max(-80, Math.min(80, n))
+			} else {
+				const lin = Math.max(n, 1e-6)
+				const db = 20 * Math.log10(lin)
+				return Math.max(-80, Math.min(80, db))
+			}
+		}
+
+		// Diagnostic helper for standby to capture raw response using preferred and fallback types.
+		// Uses the short probe timeout so discovery cannot block for long on an unreachable device.
 		const readValueWithDebug = async (url: string, path: string) => {
 			const preferred = getPreferredValueTypeForPath(path, ValueType.STRING)
 			const tryTypes: number[] = [
@@ -168,7 +264,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 				if (tried.has(t)) continue
 				tried.add(t)
 				try {
-					const val = await readValue(url, path, t)
+					const val = await readValue(url, path, t, probeTimeout)
 					this.log('debug', `standby-read path=${path} as ${ValueType[t] ?? t} -> ${String(val)}`)
 					if (val !== undefined) return { raw: val, valueType: (ValueType[t] ?? String(t)) as any }
 				} catch (e: any) {
@@ -212,6 +308,10 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 			const staggerMs = 150
 			let firstId: string | undefined
 
+			// Track per-device poll outcome for aggregate status reporting
+			const unreachableHosts: string[] = []
+			const okHosts: string[] = []
+
 			const tasks = hosts.map(async (host, idx) => {
 				await delay(idx * staggerMs)
 				const scheme = this.config.useHttps ? 'https' : 'http'
@@ -224,18 +324,34 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 				const until = this.backoffUntilById[id] || 0
 				if (Date.now() < until) {
 					this.log('debug', `poll-skip[${id}] in backoff for ${Math.max(0, until - Date.now())}ms`)
+					// Preserve previously recorded unreachable state for aggregate status
+					if (this.deviceStatusById[id]?.connected === false) unreachableHosts.push(host)
+					else okHosts.push(host)
 					return
 				}
 
 				try {
 					// Ensure structure
-					if (!this.deviceStatusById[id]) this.deviceStatusById[id] = { channels: [] }
+					if (!this.deviceStatusById[id]) this.deviceStatusById[id] = { channels: [], speakers: [] }
 					if (!Array.isArray(this.deviceStatusById[id].channels)) this.deviceStatusById[id].channels = []
+					if (!Array.isArray(this.deviceStatusById[id].speakers)) this.deviceStatusById[id].speakers = []
 					for (let i = 0; i < chCount; i++) {
-						if (!this.deviceStatusById[id].channels[i]) {
-							this.deviceStatusById[id].channels[i] = {}
-						}
+						if (!this.deviceStatusById[id].channels[i]) this.deviceStatusById[id].channels[i] = {}
+						if (!this.deviceStatusById[id].speakers[i]) this.deviceStatusById[id].speakers[i] = {}
 					}
+
+					// Reachability probe: a single short-timeout read. If the device does not
+					// respond, bail out immediately instead of running the expensive power-path
+					// discovery (up to 48 sequential reads) which previously blocked for minutes.
+					try {
+						await readValue(url, ParameterPaths.DEVICE_FIRMWARE_VERSION, ValueType.STRING, probeTimeout)
+					} catch (probeErr: any) {
+						throw Object.assign(new Error(`unreachable: ${probeErr?.message || probeErr}`), { isUnreachable: true })
+					}
+
+					// Device responded -> mark connected and clear stale error
+					this.deviceStatusById[id].connected = true
+					this.deviceStatusById[id].error = 'None'
 
 					// Determine power path per device (override -> cached -> discovery)
 					let powerPath: string | undefined = this.powerPathMap[id]
@@ -261,7 +377,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 						? await readValueWithDebug(url, powerPath)
 						: { raw: undefined as any, valueType: 'ERROR' as const }
 
-					const [firmware, model, ipAddr] = await Promise.all([
+					const [firmware, name, ipAddr] = await Promise.all([
 						readValue(url, ParameterPaths.DEVICE_FIRMWARE_VERSION, ValueType.STRING),
 						readValue(url, ParameterPaths.DEVICE_NAME, ValueType.STRING),
 						readValue(url, ParameterPaths.NETWORK_ADDRESS, ValueType.STRING),
@@ -285,7 +401,9 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 					)
 					this.deviceStatusById[id].power = computedPowerOn
 					this.deviceStatusById[id].firmware = firmware || 'Unknown'
-					this.deviceStatusById[id].model = model || 'Unknown'
+					this.deviceStatusById[id].name = name || host
+					// Back-compat: no API model path -> mirror name into model
+					this.deviceStatusById[id].model = this.deviceStatusById[id].name
 					this.deviceStatusById[id].ip = ipAddr || host
 
 					// Channel-level reads (mute/gain)
@@ -293,15 +411,31 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 						for (let ch = 0; ch < chCount; ch++) {
 							const mutePath = ParameterPaths.INPUT_CHANNEL_MUTE.replace('{0}', String(ch))
 							const gainPath = ParameterPaths.INPUT_CHANNEL_GAIN.replace('{0}', String(ch))
+							const limitPath = ParameterPaths.OUTPUT_CHANNEL_PEAK_LIMITER_THRESHOLD_VALUE.replace('{0}', String(ch))
 							try {
-								const [mute, gain] = await Promise.all([
+								const [mute, gain, limiter] = await Promise.all([
 									readValue(url, mutePath, ValueType.BOOL),
 									readValue(url, gainPath, ValueType.FLOAT),
+									readValue(url, limitPath, ValueType.FLOAT),
 								])
 								this.deviceStatusById[id].channels[ch].mute = Boolean(mute)
-								this.deviceStatusById[id].channels[ch].gain = typeof gain === 'number' ? gain : undefined
+								this.deviceStatusById[id].channels[ch].gain = normalizeGain(gain)
+								if (typeof limiter === 'number' && isFinite(limiter)) {
+									this.deviceStatusById[id].channels[ch].limiterThreshold = limiter
+								}
 							} catch (chErr: any) {
 								this.log('debug', `Channel ${ch + 1} poll failed[${id}]: ${chErr?.message || chErr}`)
+							}
+
+							// Speaker model name
+							try {
+								const spPath = ParameterPaths.SPEAKER_NAME.replace('{0}', String(ch))
+								const spName = await readValue(url, spPath, ValueType.STRING)
+								if (typeof spName === 'string' && spName.length > 0) {
+									this.deviceStatusById[id].speakers[ch].modelName = spName
+								}
+							} catch (spErr: any) {
+								this.log('debug', `Speaker ${ch + 1} name poll failed[${id}]: ${spErr?.message || spErr}`)
 							}
 						}
 					}
@@ -319,6 +453,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 					// success -> reset error/backoff
 					this.errorCountById[id] = 0
 					this.backoffUntilById[id] = 0
+					okHosts.push(host)
 				} catch (perHostErr: any) {
 					// failure -> increment error/backoff for this device only
 					const prev = this.errorCountById[id] || 0
@@ -326,6 +461,10 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 					this.errorCountById[id] = next
 					const backoff = Math.min(30000, 1000 * Math.pow(2, Math.min(5, next - 1)))
 					this.backoffUntilById[id] = Date.now() + backoff
+					// Mark device unreachable and surface it in variables/feedbacks
+					this.deviceStatusById[id].connected = false
+					this.deviceStatusById[id].error = 'Unreachable'
+					unreachableHosts.push(host)
 					this.log(
 						'debug',
 						`poll-error[${id}] count=${next} backoffMs=${backoff} err=${perHostErr?.message || perHostErr}`,
@@ -338,7 +477,14 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 			// Maintain legacy single-device mirror for first configured device
 			if (firstId) this.deviceStatus = this.deviceStatusById[firstId]
 
-			this.updateStatus(InstanceStatus.Ok)
+			// Aggregate status reflects per-device outcomes instead of always Ok
+			if (unreachableHosts.length > 0 && okHosts.length === 0) {
+				this.updateStatus(InstanceStatus.ConnectionFailure, `Unreachable: ${unreachableHosts.join(', ')}`)
+			} else if (unreachableHosts.length > 0) {
+				this.updateStatus(InstanceStatus.UnknownWarning, `Unreachable: ${unreachableHosts.join(', ')}`)
+			} else {
+				this.updateStatus(InstanceStatus.Ok)
+			}
 		} catch (err: any) {
 			this.log('error', `Polling error: ${err.message || String(err)}`)
 			this.updateStatus(InstanceStatus.UnknownError, err.message || String(err))
@@ -372,7 +518,11 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 				const ch = status.channels[i]
 				if (ch) {
 					if (typeof ch.mute === 'boolean') this.deviceStatus.channels[i].mute = ch.mute
-					if (typeof ch.gain === 'number') this.deviceStatus.channels[i].gain = ch.gain
+					if (typeof ch.gain === 'number') {
+						// Normalize even for UDP for consistency (UDP already returns dB)
+						const g = ch.gain
+						this.deviceStatus.channels[i].gain = g < 0 || g > 10 ? g : 20 * Math.log10(Math.max(g, 1e-6))
+					}
 				}
 			}
 
