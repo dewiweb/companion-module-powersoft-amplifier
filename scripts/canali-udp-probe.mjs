@@ -91,7 +91,6 @@ function buildFrame({ cmd, cookie, answerPort, data, forceComputedCrcForCmd14 = 
 	buf.writeUInt8(notCmd, o)
 	o += 1
 	buf.writeUInt8(ETX, o)
-	o += 1
 	return buf
 }
 
