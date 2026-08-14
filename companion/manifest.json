@@ -1,7 +1,7 @@
 {
 	"$schema": "../node_modules/@companion-module/base/assets/manifest.schema.json",
 	"type": "connection",
-	"id": "powersoft-amplifiers",
+	"id": "powersoft-amplifier",
 	"name": "Powersoft Amplifier",
 	"shortname": "Powersoft",
 	"description": "Control and monitor Powersoft amplifiers via network",
@@ -21,7 +21,7 @@
 		"apiVersion": "0.0.0",
 		"entrypoint": "../dist/main.js"
 	},
-	"legacyIds": [],
+	"legacyIds": ["powersoft-amplifiers"],
 	"manufacturer": "Powersoft",
 	"products": ["Amplifier"],
 	"keywords": ["audio", "amplifier", "powersoft", "pro-audio"]
