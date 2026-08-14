@@ -169,19 +169,7 @@ export function UpdatePresets(self: ModuleInstance): {
 					bgcolor: combineRgb(200, 200, 200),
 				},
 				steps: [],
-				feedbacks: [
-					{
-						feedbackId: 'channelClip',
-						options: {
-							device: defaultDevice,
-							channel: channel,
-						},
-						style: {
-							bgcolor: combineRgb(255, 255, 0), // Yellow when clipping
-							color: combineRgb(0, 0, 0),
-						},
-					},
-				],
+				feedbacks: [],
 			},
 
 			[`diag_tone_start_ch${channel}`]: {
