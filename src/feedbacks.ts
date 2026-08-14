@@ -22,6 +22,15 @@ export type FeedbackId =
 	| 'channelOtherFault'
 	| 'channelThermalSOA'
 	| 'channelAuxCurrentFault'
+	| 'channelProtection'
+	| 'channelProtectionThermal'
+	| 'channelProtectionUnrecoverable'
+	| 'channelLoadMonitor'
+	| 'channelGainReduction'
+	| 'deviceHwFault'
+	| 'deviceOverTempModerate'
+	| 'deviceOverTempHigh'
+	| 'deviceStandby'
 
 interface Feedback {
 	type: 'boolean'
@@ -657,6 +666,189 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 				const channel = (feedback.options.channel as number) - 1
 				const status = resolveStatus(feedback.options.device as string)
 				return status.channels?.[channel]?.diagToneDetect?.enabled === true
+			},
+		}
+	}
+
+	// --- WebSocket-based feedbacks (only when WS meters are enabled) ---
+	const wsEnabled = Boolean(self.config.enableWebSocketMeters)
+	if (wsEnabled) {
+		const channelChoices = Array.from({ length: self.config.maxChannels || 8 }, (_, i) => ({
+			id: i + 1,
+			label: `Channel ${i + 1}`,
+		}))
+
+		feedbacks.channelProtection = {
+			type: 'boolean',
+			name: 'Channel Protection (WS)',
+			description: 'True when protection is active on a channel (WebSocket real-time)',
+			defaultStyle: {
+				bgcolor: combineRgb(200, 0, 0),
+				color: combineRgb(255, 255, 255),
+			},
+			options: [
+				{ type: 'dropdown', id: 'device', label: 'Device', default: deviceChoices()[0]?.id, choices: deviceChoices() },
+				{ type: 'dropdown', id: 'channel', label: 'Channel', default: 1, choices: channelChoices },
+			],
+			callback: (feedback) => {
+				const channel = (feedback.options.channel as number) - 1
+				const status = resolveStatus(feedback.options.device as string)
+				return status.meters?.channels?.[channel]?.protection === true
+			},
+		}
+
+		feedbacks.channelProtectionThermal = {
+			type: 'boolean',
+			name: 'Channel Protection Thermal Limiting (WS)',
+			description: 'True when thermal limiting is active on a channel (WebSocket real-time)',
+			defaultStyle: {
+				bgcolor: combineRgb(255, 165, 0),
+				color: combineRgb(0, 0, 0),
+			},
+			options: [
+				{ type: 'dropdown', id: 'device', label: 'Device', default: deviceChoices()[0]?.id, choices: deviceChoices() },
+				{ type: 'dropdown', id: 'channel', label: 'Channel', default: 1, choices: channelChoices },
+			],
+			callback: (feedback) => {
+				const channel = (feedback.options.channel as number) - 1
+				const status = resolveStatus(feedback.options.device as string)
+				return status.meters?.channels?.[channel]?.protectionThermalLimiting === true
+			},
+		}
+
+		feedbacks.channelProtectionUnrecoverable = {
+			type: 'boolean',
+			name: 'Channel Protection Unrecoverable (WS)',
+			description: 'True when unrecoverable protection is active on a channel (WebSocket real-time)',
+			defaultStyle: {
+				bgcolor: combineRgb(180, 0, 0),
+				color: combineRgb(255, 255, 255),
+			},
+			options: [
+				{ type: 'dropdown', id: 'device', label: 'Device', default: deviceChoices()[0]?.id, choices: deviceChoices() },
+				{ type: 'dropdown', id: 'channel', label: 'Channel', default: 1, choices: channelChoices },
+			],
+			callback: (feedback) => {
+				const channel = (feedback.options.channel as number) - 1
+				const status = resolveStatus(feedback.options.device as string)
+				return status.meters?.channels?.[channel]?.protectionUnrecoverable === true
+			},
+		}
+
+		feedbacks.channelLoadMonitor = {
+			type: 'boolean',
+			name: 'Channel Load Monitor (WS)',
+			description: 'True when load monitor is active on a channel (WebSocket real-time)',
+			defaultStyle: {
+				bgcolor: combineRgb(255, 255, 0),
+				color: combineRgb(0, 0, 0),
+			},
+			options: [
+				{ type: 'dropdown', id: 'device', label: 'Device', default: deviceChoices()[0]?.id, choices: deviceChoices() },
+				{ type: 'dropdown', id: 'channel', label: 'Channel', default: 1, choices: channelChoices },
+			],
+			callback: (feedback) => {
+				const channel = (feedback.options.channel as number) - 1
+				const status = resolveStatus(feedback.options.device as string)
+				return status.meters?.channels?.[channel]?.loadMonitor === true
+			},
+		}
+
+		feedbacks.channelGainReduction = {
+			type: 'boolean',
+			name: 'Channel Gain Reduction Active (WS)',
+			description: 'True when any gain reduction/limiting is active on a channel (WebSocket real-time)',
+			defaultStyle: {
+				bgcolor: combineRgb(255, 165, 0),
+				color: combineRgb(0, 0, 0),
+			},
+			options: [
+				{ type: 'dropdown', id: 'device', label: 'Device', default: deviceChoices()[0]?.id, choices: deviceChoices() },
+				{ type: 'dropdown', id: 'channel', label: 'Channel', default: 1, choices: channelChoices },
+				{
+					type: 'number',
+					id: 'threshold',
+					label: 'Threshold (0-1, trigger when GR below this value)',
+					default: 0.95,
+					min: 0,
+					max: 1,
+					step: 0.01,
+				},
+			],
+			callback: (feedback) => {
+				const channel = (feedback.options.channel as number) - 1
+				const threshold = parseFloat(feedback.options.threshold as string) || 0.95
+				const status = resolveStatus(feedback.options.device as string)
+				const gr = status.meters?.channels?.[channel]?.gainReductionTotal
+				return typeof gr === 'number' && gr < threshold
+			},
+		}
+
+		feedbacks.deviceHwFault = {
+			type: 'boolean',
+			name: 'Device Hardware Fault (WS)',
+			description: 'True when a generic hardware fault is reported (WebSocket real-time)',
+			defaultStyle: {
+				bgcolor: combineRgb(200, 0, 0),
+				color: combineRgb(255, 255, 255),
+			},
+			options: [
+				{ type: 'dropdown', id: 'device', label: 'Device', default: deviceChoices()[0]?.id, choices: deviceChoices() },
+			],
+			callback: (feedback) => {
+				const status = resolveStatus(feedback.options.device as string)
+				return Boolean(status.meters?.genericHwFault)
+			},
+		}
+
+		feedbacks.deviceOverTempModerate = {
+			type: 'boolean',
+			name: 'Device Moderate Over-Temperature (WS)',
+			description: 'True when moderate over-temperature alarm is active (WebSocket real-time)',
+			defaultStyle: {
+				bgcolor: combineRgb(255, 165, 0),
+				color: combineRgb(0, 0, 0),
+			},
+			options: [
+				{ type: 'dropdown', id: 'device', label: 'Device', default: deviceChoices()[0]?.id, choices: deviceChoices() },
+			],
+			callback: (feedback) => {
+				const status = resolveStatus(feedback.options.device as string)
+				return Boolean(status.meters?.moderateOverTemperature)
+			},
+		}
+
+		feedbacks.deviceOverTempHigh = {
+			type: 'boolean',
+			name: 'Device High Over-Temperature (WS)',
+			description: 'True when high over-temperature alarm is active (WebSocket real-time)',
+			defaultStyle: {
+				bgcolor: combineRgb(200, 0, 0),
+				color: combineRgb(255, 255, 255),
+			},
+			options: [
+				{ type: 'dropdown', id: 'device', label: 'Device', default: deviceChoices()[0]?.id, choices: deviceChoices() },
+			],
+			callback: (feedback) => {
+				const status = resolveStatus(feedback.options.device as string)
+				return Boolean(status.meters?.highOverTemperature)
+			},
+		}
+
+		feedbacks.deviceStandby = {
+			type: 'boolean',
+			name: 'Device Standby (WS)',
+			description: 'True when the amplifier is in standby (WebSocket real-time)',
+			defaultStyle: {
+				bgcolor: combineRgb(60, 60, 60),
+				color: combineRgb(255, 255, 255),
+			},
+			options: [
+				{ type: 'dropdown', id: 'device', label: 'Device', default: deviceChoices()[0]?.id, choices: deviceChoices() },
+			],
+			callback: (feedback) => {
+				const status = resolveStatus(feedback.options.device as string)
+				return Boolean(status.meters?.standby)
 			},
 		}
 	}

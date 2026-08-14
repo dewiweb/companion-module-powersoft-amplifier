@@ -1,20 +1,23 @@
 # companion-module-powersoft-amplifier
 
-Short description and project overview for the Bitfocus Companion module for Powersoft amplifiers.
+Bitfocus Companion module to control and monitor Powersoft amplifiers over the network.
 
 ## Overview
 
-This repository contains a Bitfocus Companion module to control Powersoft amplifiers over the network (HTTP API) with optional UDP feedback polling for power, mutes, and alarms.
+This module controls Powersoft amplifiers via the HTTP API (port 80) with optional UDP feedback polling and WebSocket real-time metering.
 
 - Supports single-device and multi-device setups.
-- Targets Ottocanali and similar series using the documented API.
-- UDP alarms/feedback can be enabled via `enableUdpFeedback` in the module config.
+- Targets Ottocanali and similar series using the UNICA API.
+- **HTTP polling** for power, mute, gain, device info (default, port 80).
+- **UDP feedback** for power/mutes/alarms via UDP 1234 (`enableUdpFeedback`).
+- **WebSocket real-time meters** for V/I levels, temperatures, protection, DSP load, etc. (`enableWebSocketMeters`, requires Companion 5.0+).
 
 ## Documentation
 
 Detailed user-facing documentation (configuration, actions, variables, feedback, and notes) lives in:
 
 - [companion/HELP.md](companion/HELP.md)
+- [CHANGELOG.md](CHANGELOG.md) — release notes and version history
 - Additional technical docs in [docs/](docs/)
 
 ## Beta: Auto Discovery Mode

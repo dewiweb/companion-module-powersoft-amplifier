@@ -22,6 +22,8 @@ export interface ModuleConfig {
 	udpPort?: number
 	udpPollInterval?: number
 	udpAnswerPortZero?: boolean
+	// WebSocket real-time meters (push-based, read-only)
+	enableWebSocketMeters?: boolean
 }
 
 type InstanceLike = {
@@ -214,6 +216,15 @@ export function GetConfigFields(self?: InstanceLike): SomeCompanionConfigField[]
 			default: false,
 			tooltip: 'Some firmware answers only when answer_port=0 is used (observed in tests).',
 			isVisibleExpression: '!!$(config:enableUdpFeedback)',
+		},
+		{
+			type: 'checkbox',
+			id: 'enableWebSocketMeters',
+			label: 'Enable WebSocket real-time meters',
+			width: 12,
+			default: false,
+			tooltip:
+				'When enabled, the module connects to the amplifier WebSocket endpoint and receives real-time meter data (V/I levels, temperatures, protection status, DSP load, etc.) approximately once per second. This is a read-only connection — no commands are sent to the amplifier.',
 		},
 	]
 }

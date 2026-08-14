@@ -6,6 +6,9 @@ import { UpdateActions } from './actions.js'
 import { UpdateFeedbacks } from './feedbacks.js'
 import { UpdatePresets } from './presets.js'
 import { UpgradeScripts } from './upgrades.js'
+import { PowersoftWsClient } from './ws.js'
+import { createDefaultDeviceMeters, mergeMeters } from './meters.js'
+import { listDevices, sanitizeDeviceId } from './devices.js'
 
 export default class ModuleInstance extends InstanceBase {
 	config!: ModuleConfig
@@ -25,6 +28,8 @@ export default class ModuleInstance extends InstanceBase {
 	SCANNING = false
 	discoverySocket?: any
 	_discoveryInterval?: NodeJS.Timeout | null
+	// WebSocket real-time meter clients (per device host)
+	wsClients: Record<string, any> = {}
 
 	constructor(internal: unknown) {
 		super(internal)
@@ -158,6 +163,7 @@ export default class ModuleInstance extends InstanceBase {
 		this.pollingInterval = null
 		this.variableUpdateInterval = null
 		this.udpInterval = null
+		this.stopWebSocketClients()
 	}
 
 	startPolling(): void {
@@ -175,6 +181,9 @@ export default class ModuleInstance extends InstanceBase {
 			this.udpInterval = setInterval(() => {
 				void this.pollUdpStatus()
 			}, this.config.udpPollInterval ?? 1000)
+		}
+		if (this.config.enableWebSocketMeters) {
+			this.startWebSocketClients()
 		}
 		this.pollingInterval = setInterval(() => {
 			void this.pollDeviceStatus()
@@ -536,6 +545,65 @@ export default class ModuleInstance extends InstanceBase {
 			// Do not downgrade module status on UDP errors; just log
 			this.log('debug', `UDP poll error: ${e?.message || e}`)
 		}
+	}
+
+	/**
+	 * Start WebSocket meter clients for all configured devices.
+	 * Each amplifier gets its own push-based connection that receives
+	 * real-time meter data (V/I, temperature, protection, DSP load, etc.).
+	 */
+	startWebSocketClients(): void {
+		this.stopWebSocketClients()
+		const hosts = listDevices(this.config)
+		const chCount = this.config.maxChannels ?? 8
+
+		for (const host of hosts) {
+			const id = sanitizeDeviceId(host)
+			// Ensure device status and meters structure exist
+			if (!this.deviceStatusById[id]) this.deviceStatusById[id] = { channels: [], speakers: [] }
+			if (!this.deviceStatusById[id].meters) {
+				this.deviceStatusById[id].meters = createDefaultDeviceMeters(chCount)
+			}
+
+			const client = new PowersoftWsClient({
+				host,
+				port: this.config.port ?? 80,
+				useHttps: this.config.useHttps ?? false,
+				username: this.config.username,
+				password: this.config.password,
+				log: (level, msg) => this.log(level, msg),
+				onStatus: (connected) => {
+					this.log('debug', `WS [${host}] ${connected ? 'connected' : 'disconnected'}`)
+				},
+				onMeters: (meters) => {
+					const status = this.deviceStatusById[id]
+					if (!status) return
+					if (!status.meters) status.meters = createDefaultDeviceMeters(chCount)
+					const changed = mergeMeters(status.meters, chCount, meters)
+					if (changed) {
+						UpdateVariables(this)
+						this.checkAllFeedbacks()
+					}
+				},
+			})
+			client.connect()
+			this.wsClients[host] = client
+		}
+		this.log('info', `WebSocket meters enabled for ${hosts.length} device(s)`)
+	}
+
+	/**
+	 * Disconnect all WebSocket meter clients.
+	 */
+	stopWebSocketClients(): void {
+		for (const host of Object.keys(this.wsClients)) {
+			try {
+				this.wsClients[host]?.disconnect()
+			} catch {
+				// ignore
+			}
+		}
+		this.wsClients = {}
 	}
 }
 
