@@ -1,4 +1,4 @@
-import type { ModuleInstance } from './main.js'
+import type ModuleInstance from './main.js'
 import { listDevices, sanitizeDeviceId } from './devices.js'
 
 // Formatting helpers
@@ -12,42 +12,36 @@ export function UpdateVariableDefinitions(self: ModuleInstance): void {
 	const hosts = listDevices(self.config)
 	const udpEnabled = Boolean(self.config.enableUdpFeedback)
 
-	const defs: { variableId: string; name: string }[] = []
+	const defs: Record<string, { name: string }> = {}
 
 	const addDeviceDefs = (id: string, label: string) => {
-		defs.push(
-			{ variableId: `name_${id}`, name: `Device Name [${label}]` },
-			{ variableId: `firmware_${id}`, name: `Firmware Version [${label}]` },
-			{ variableId: `ip_${id}`, name: `IP Address [${label}]` },
-			{ variableId: `power_${id}`, name: `Power State [${label}]` },
-			{ variableId: `connected_${id}`, name: `Connection State [${label}]` },
-			{ variableId: `temperature_${id}`, name: `Device Temperature (°C) [${label}]` },
-			{ variableId: `fanSpeed_${id}`, name: `Fan Speed (%) [${label}]` },
-			{ variableId: `error_${id}`, name: `Error Message [${label}]` },
-		)
+		defs[`name_${id}`] = { name: `Device Name [${label}]` }
+		defs[`firmware_${id}`] = { name: `Firmware Version [${label}]` }
+		defs[`ip_${id}`] = { name: `IP Address [${label}]` }
+		defs[`power_${id}`] = { name: `Power State [${label}]` }
+		defs[`connected_${id}`] = { name: `Connection State [${label}]` }
+		defs[`temperature_${id}`] = { name: `Device Temperature (°C) [${label}]` }
+		defs[`fanSpeed_${id}`] = { name: `Fan Speed (%) [${label}]` }
+		defs[`error_${id}`] = { name: `Error Message [${label}]` }
 		for (let i = 0; i < chCount; i++) {
 			const ch = i + 1
-			defs.push(
-				{ variableId: `ch${ch}_name_${id}`, name: `Ch ${ch} Name [${label}]` },
-				{ variableId: `ch${ch}_mute_${id}`, name: `Ch ${ch} Mute [${label}]` },
-				{ variableId: `ch${ch}_gain_${id}`, name: `Ch ${ch} Gain (dB) [${label}]` },
-				{ variableId: `ch${ch}_limiter_threshold_${id}`, name: `Ch ${ch} Limiter Threshold (dB) [${label}]` },
-				{ variableId: `ch${ch}_clip_${id}`, name: `Ch ${ch} Clip [${label}]` },
-				{ variableId: `ch${ch}_signal_${id}`, name: `Ch ${ch} Signal Present [${label}]` },
-				{ variableId: `ch${ch}_temp_${id}`, name: `Ch ${ch} Temperature (°C) [${label}]` },
-				{ variableId: `ch${ch}_impedance_${id}`, name: `Ch ${ch} Load Impedance (Ω) [${label}]` },
-				{ variableId: `sp${ch}_model_${id}`, name: `Speaker ${ch} Model [${label}]` },
-			)
+			defs[`ch${ch}_name_${id}`] = { name: `Ch ${ch} Name [${label}]` }
+			defs[`ch${ch}_mute_${id}`] = { name: `Ch ${ch} Mute [${label}]` }
+			defs[`ch${ch}_gain_${id}`] = { name: `Ch ${ch} Gain (dB) [${label}]` }
+			defs[`ch${ch}_limiter_threshold_${id}`] = { name: `Ch ${ch} Limiter Threshold (dB) [${label}]` }
+			defs[`ch${ch}_clip_${id}`] = { name: `Ch ${ch} Clip [${label}]` }
+			defs[`ch${ch}_signal_${id}`] = { name: `Ch ${ch} Signal Present [${label}]` }
+			defs[`ch${ch}_temp_${id}`] = { name: `Ch ${ch} Temperature (°C) [${label}]` }
+			defs[`ch${ch}_impedance_${id}`] = { name: `Ch ${ch} Load Impedance (Ω) [${label}]` }
+			defs[`sp${ch}_model_${id}`] = { name: `Speaker ${ch} Model [${label}]` }
 			// UDP-specific per-channel alarm variables are only exposed when UDP feedback is enabled
 			if (udpEnabled) {
-				defs.push(
-					{ variableId: `ch${ch}_overtemp_${id}`, name: `Ch ${ch} Over-Temperature [${label}]` },
-					{ variableId: `ch${ch}_lowload_${id}`, name: `Ch ${ch} Low Load Protection [${label}]` },
-					{ variableId: `ch${ch}_rail_fault_${id}`, name: `Ch ${ch} Rail Voltage Fault [${label}]` },
-					{ variableId: `ch${ch}_other_fault_${id}`, name: `Ch ${ch} Other Fault [${label}]` },
-					{ variableId: `ch${ch}_thermal_soa_${id}`, name: `Ch ${ch} Thermal SOA [${label}]` },
-					{ variableId: `ch${ch}_aux_current_fault_${id}`, name: `Ch ${ch} AUX Current Fault [${label}]` },
-				)
+				defs[`ch${ch}_overtemp_${id}`] = { name: `Ch ${ch} Over-Temperature [${label}]` }
+				defs[`ch${ch}_lowload_${id}`] = { name: `Ch ${ch} Low Load Protection [${label}]` }
+				defs[`ch${ch}_rail_fault_${id}`] = { name: `Ch ${ch} Rail Voltage Fault [${label}]` }
+				defs[`ch${ch}_other_fault_${id}`] = { name: `Ch ${ch} Other Fault [${label}]` }
+				defs[`ch${ch}_thermal_soa_${id}`] = { name: `Ch ${ch} Thermal SOA [${label}]` }
+				defs[`ch${ch}_aux_current_fault_${id}`] = { name: `Ch ${ch} AUX Current Fault [${label}]` }
 			}
 		}
 	}

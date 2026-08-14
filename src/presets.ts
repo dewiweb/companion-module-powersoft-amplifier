@@ -1,20 +1,21 @@
-import { combineRgb, type CompanionPresetDefinitions } from '@companion-module/base'
-import type { ModuleInstance } from './main.js'
+import { combineRgb, type CompanionPresetDefinitions, type CompanionPresetSection } from '@companion-module/base'
+import type ModuleInstance from './main.js'
 import { listDevices } from './devices.js'
 
-export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions {
+export function UpdatePresets(self: ModuleInstance): {
+	structure: CompanionPresetSection[]
+	presets: CompanionPresetDefinitions
+} {
 	const maxChannels = self.config?.maxChannels || 8
 	const defaultDevice = listDevices(self.config)[0] || self.config.host || ''
 
-	// Helper function to create channel-specific presets
-	const createChannelPresets = (channel: number) => {
+	// Helper to create channel-specific preset definitions
+	const createChannelPresets = (channel: number): CompanionPresetDefinitions => {
 		const channelName = `CH${channel}`
 
 		return {
-			// Mute Toggle
 			[`mute_toggle_ch${channel}`]: {
-				type: 'button',
-				category: `${channelName} Mute`,
+				type: 'simple',
 				name: `${channelName} Mute Toggle`,
 				style: {
 					text: `${channelName}\\nUNMUTED`,
@@ -52,10 +53,8 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 				],
 			},
 
-			// Gain Control (relative)
 			[`gain_up_ch${channel}`]: {
-				type: 'button',
-				category: `${channelName} Gain`,
+				type: 'simple',
 				name: `${channelName} Gain +1 dB`,
 				style: {
 					text: `${channelName}\\nGAIN ▲ +1dB`,
@@ -82,8 +81,7 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 			},
 
 			[`gain_down_ch${channel}`]: {
-				type: 'button',
-				category: `${channelName} Gain`,
+				type: 'simple',
 				name: `${channelName} Gain -1 dB`,
 				style: {
 					text: `${channelName}\\nGAIN ▼ -1dB`,
@@ -109,10 +107,8 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 				feedbacks: [],
 			},
 
-			// Gain Setpoints (absolute)
 			[`gain_set_m10_ch${channel}`]: {
-				type: 'button',
-				category: `${channelName} Gain`,
+				type: 'simple',
 				name: `${channelName} Gain -10 dB`,
 				style: {
 					text: `${channelName}\\nSET -10dB`,
@@ -129,8 +125,7 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 				feedbacks: [],
 			},
 			[`gain_set_0_ch${channel}`]: {
-				type: 'button',
-				category: `${channelName} Gain`,
+				type: 'simple',
 				name: `${channelName} Gain 0 dB`,
 				style: {
 					text: `${channelName}\\nSET 0dB`,
@@ -147,8 +142,7 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 				feedbacks: [],
 			},
 			[`gain_set_p5_ch${channel}`]: {
-				type: 'button',
-				category: `${channelName} Gain`,
+				type: 'simple',
 				name: `${channelName} Gain +5 dB`,
 				style: {
 					text: `${channelName}\\nSET +5dB`,
@@ -165,10 +159,8 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 				feedbacks: [],
 			},
 
-			// Clip Indicator
 			[`clip_indicator_ch${channel}`]: {
-				type: 'button',
-				category: `${channelName} Status`,
+				type: 'simple',
 				name: `${channelName} Clip Indicator`,
 				style: {
 					text: `${channelName}\\nCLIP`,
@@ -192,10 +184,8 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 				],
 			},
 
-			// Diagnostics: Tone Generator Start
 			[`diag_tone_start_ch${channel}`]: {
-				type: 'button',
-				category: `${channelName} Diagnostics`,
+				type: 'simple',
 				name: `${channelName} Tone Start`,
 				style: {
 					text: `${channelName}\\nTONE ON`,
@@ -217,10 +207,8 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 				feedbacks: [],
 			},
 
-			// Diagnostics: Tone Generator Stop
 			[`diag_tone_stop_ch${channel}`]: {
-				type: 'button',
-				category: `${channelName} Diagnostics`,
+				type: 'simple',
 				name: `${channelName} Tone Stop`,
 				style: {
 					text: `${channelName}\\nTONE OFF`,
@@ -237,10 +225,8 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 				feedbacks: [],
 			},
 
-			// Diagnostics: Impedance Measure Start
 			[`diag_imp_start_ch${channel}`]: {
-				type: 'button',
-				category: `${channelName} Diagnostics`,
+				type: 'simple',
 				name: `${channelName} Impedance Start`,
 				style: {
 					text: `${channelName}\\nIMP ON`,
@@ -262,10 +248,8 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 				feedbacks: [],
 			},
 
-			// Diagnostics: Impedance Measure Stop
 			[`diag_imp_stop_ch${channel}`]: {
-				type: 'button',
-				category: `${channelName} Diagnostics`,
+				type: 'simple',
 				name: `${channelName} Impedance Stop`,
 				style: {
 					text: `${channelName}\\nIMP OFF`,
@@ -282,10 +266,8 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 				feedbacks: [],
 			},
 
-			// Diagnostics: Tone Detection Enable
 			[`diag_det_enable_ch${channel}`]: {
-				type: 'button',
-				category: `${channelName} Diagnostics`,
+				type: 'simple',
 				name: `${channelName} Detection Enable`,
 				style: {
 					text: `${channelName}\\nDETECT ON`,
@@ -307,10 +289,8 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 				feedbacks: [],
 			},
 
-			// Diagnostics: Tone Detection Disable
 			[`diag_det_disable_ch${channel}`]: {
-				type: 'button',
-				category: `${channelName} Diagnostics`,
+				type: 'simple',
 				name: `${channelName} Detection Disable`,
 				style: {
 					text: `${channelName}\\nDETECT OFF`,
@@ -327,10 +307,8 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 				feedbacks: [],
 			},
 
-			// Diagnostics: Stop All on Channel
 			[`diag_stop_all_ch${channel}`]: {
-				type: 'button',
-				category: `${channelName} Diagnostics`,
+				type: 'simple',
 				name: `${channelName} Stop All`,
 				style: {
 					text: `${channelName}\\nSTOP ALL`,
@@ -349,18 +327,16 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 		}
 	}
 
-	// Create presets for each channel
-	const channelPresets = {}
+	// Build per-channel preset definitions
+	const channelPresets: CompanionPresetDefinitions = {}
 	for (let i = 1; i <= maxChannels; i++) {
 		Object.assign(channelPresets, createChannelPresets(i))
 	}
 
 	// Global presets
 	const globalPresets: CompanionPresetDefinitions = {
-		// Power Control (device-level)
 		power_on: {
-			type: 'button',
-			category: 'Power',
+			type: 'simple',
 			name: 'Power On',
 			style: {
 				text: 'POWER\\nON',
@@ -386,8 +362,7 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 			],
 		},
 		power_off: {
-			type: 'button',
-			category: 'Power',
+			type: 'simple',
 			name: 'Power OFF',
 			style: {
 				text: 'POWER\\nOFF',
@@ -404,8 +379,7 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 			feedbacks: [],
 		},
 		power_toggle: {
-			type: 'button',
-			category: 'Power',
+			type: 'simple',
 			name: 'Power TOGGLE',
 			style: {
 				text: 'POWER\nTOGGLE',
@@ -422,10 +396,8 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 			feedbacks: [],
 		},
 
-		// Reset Protection
 		reset_protection: {
-			type: 'button',
-			category: 'Maintenance',
+			type: 'simple',
 			name: 'Reset Protection',
 			style: {
 				text: 'RESET\\nPROTECTION',
@@ -442,10 +414,8 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 			feedbacks: [],
 		},
 
-		// Reset Peak Hold
 		reset_peak_hold: {
-			type: 'button',
-			category: 'Maintenance',
+			type: 'simple',
 			name: 'Reset Peak Hold',
 			style: {
 				text: 'RESET\\nPEAK HOLD',
@@ -462,10 +432,8 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 			feedbacks: [],
 		},
 
-		// Mute/Unmute all channels (per device)
 		mute_all_channels: {
-			type: 'button',
-			category: 'Mute',
+			type: 'simple',
 			name: 'Mute All Channels',
 			style: {
 				text: 'MUTE\nALL',
@@ -485,8 +453,7 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 			feedbacks: [],
 		},
 		unmute_all_channels: {
-			type: 'button',
-			category: 'Mute',
+			type: 'simple',
 			name: 'Unmute All Channels',
 			style: {
 				text: 'UNMUTE\nALL',
@@ -506,10 +473,8 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 			feedbacks: [],
 		},
 
-		// Diagnostics: Stop All (All Channels)
 		stop_all_diagnostics_all: {
-			type: 'button',
-			category: 'Diagnostics',
+			type: 'simple',
 			name: 'Diagnostics Stop All (All CH)',
 			style: {
 				text: 'DIAG\\nSTOP ALL',
@@ -527,11 +492,88 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 		},
 	}
 
-	// Combine all presets
+	// Combine all preset definitions
 	const presets: CompanionPresetDefinitions = {
 		...globalPresets,
 		...channelPresets,
 	}
 
-	return presets
+	// Build the structure that organises presets into sections/groups in the UI
+	const structure: CompanionPresetSection[] = [
+		{
+			id: 'power',
+			name: 'Power',
+			definitions: [
+				{ id: 'power_on', type: 'simple', name: 'Power On', presets: ['power_on'] },
+				{ id: 'power_off', type: 'simple', name: 'Power Off', presets: ['power_off'] },
+				{ id: 'power_toggle', type: 'simple', name: 'Power Toggle', presets: ['power_toggle'] },
+			],
+		},
+		{
+			id: 'maintenance',
+			name: 'Maintenance',
+			definitions: [
+				{ id: 'reset_protection', type: 'simple', name: 'Reset Protection', presets: ['reset_protection'] },
+				{ id: 'reset_peak_hold', type: 'simple', name: 'Reset Peak Hold', presets: ['reset_peak_hold'] },
+			],
+		},
+		{
+			id: 'mute',
+			name: 'Mute',
+			definitions: [
+				{ id: 'mute_all', type: 'simple', name: 'Mute All Channels', presets: ['mute_all_channels'] },
+				{ id: 'unmute_all', type: 'simple', name: 'Unmute All Channels', presets: ['unmute_all_channels'] },
+			],
+		},
+		{
+			id: 'diagnostics',
+			name: 'Diagnostics',
+			definitions: [
+				{
+					id: 'stop_all_diag',
+					type: 'simple',
+					name: 'Stop All Diagnostics (All CH)',
+					presets: ['stop_all_diagnostics_all'],
+				},
+			],
+		},
+		// Per-channel groups
+		...Array.from({ length: maxChannels }, (_, i) => {
+			const ch = i + 1
+			const channelName = `CH${ch}`
+			const channelPresetIds = Object.keys(createChannelPresets(ch))
+			return {
+				id: `channel_${ch}`,
+				name: channelName,
+				definitions: [
+					{
+						id: `${channelName}_mute`,
+						type: 'simple' as const,
+						name: 'Mute',
+						presets: channelPresetIds.filter((p) => p.startsWith('mute_toggle')),
+					},
+					{
+						id: `${channelName}_gain`,
+						type: 'simple' as const,
+						name: 'Gain',
+						presets: channelPresetIds.filter((p) => p.startsWith('gain_')),
+					},
+					{
+						id: `${channelName}_status`,
+						type: 'simple' as const,
+						name: 'Status',
+						presets: channelPresetIds.filter((p) => p.startsWith('clip_indicator')),
+					},
+					{
+						id: `${channelName}_diagnostics`,
+						type: 'simple' as const,
+						name: 'Diagnostics',
+						presets: channelPresetIds.filter((p) => p.startsWith('diag_')),
+					},
+				],
+			}
+		}),
+	]
+
+	return { structure, presets }
 }

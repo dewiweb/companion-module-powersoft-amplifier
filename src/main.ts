@@ -1,5 +1,5 @@
 // Minimal Bitfocus Companion module entrypoint for Powersoft
-import { InstanceBase, runEntrypoint, InstanceStatus, SomeCompanionConfigField } from '@companion-module/base'
+import { InstanceBase, InstanceStatus, type SomeCompanionConfigField } from '@companion-module/base'
 import { GetConfigFields, type ModuleConfig } from './config.js'
 import { UpdateVariableDefinitions, UpdateVariables } from './variables.js'
 import { UpdateActions } from './actions.js'
@@ -7,7 +7,7 @@ import { UpdateFeedbacks } from './feedbacks.js'
 import { UpdatePresets } from './presets.js'
 import { UpgradeScripts } from './upgrades.js'
 
-export class ModuleInstance extends InstanceBase<ModuleConfig> {
+export default class ModuleInstance extends InstanceBase {
 	config!: ModuleConfig
 	pollingInterval: NodeJS.Timeout | null = null
 	variableUpdateInterval: NodeJS.Timeout | null = null
@@ -30,7 +30,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		super(internal)
 	}
 
-	async init(config: ModuleConfig): Promise<void> {
+	async init(config: ModuleConfig, _isFirstInit: boolean, _secrets: Record<string, any> | undefined): Promise<void> {
 		this.config = config
 		this.clearIntervals()
 		// Discovery lifecycle
@@ -54,7 +54,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		// Seed state immediately so feedbacks/variables reflect current device state ASAP
 		await this.pollDeviceStatus()
 		UpdateVariables(this)
-		this.checkFeedbacks()
+		this.checkAllFeedbacks()
 		this.startPolling()
 	}
 
@@ -69,7 +69,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		this.log('debug', 'destroy')
 	}
 
-	async configUpdated(config: ModuleConfig): Promise<void> {
+	async configUpdated(config: ModuleConfig, _secrets: Record<string, any> | undefined): Promise<void> {
 		this.config = config
 		this.clearIntervals()
 		// Map discovered device(s) -> host/devicesCsv when selected
@@ -82,13 +82,13 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 				const csv = hosts.join(', ')
 				if (csv !== (this.config.devicesCsv || '')) {
 					this.config.devicesCsv = csv
-					this.saveConfig(this.config)
+					;(this as any).saveConfig(this.config)
 				}
 			} else {
 				const first = hosts[0]
 				if (first && this.config.host !== first) {
 					this.config.host = first
-					this.saveConfig(this.config)
+					;(this as any).saveConfig(this.config)
 				}
 			}
 		}
@@ -99,7 +99,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		} else {
 			this.FOUND_DEVICES = {}
 			this.config.deviceIds = []
-			this.saveConfig(this.config)
+			;(this as any).saveConfig(this.config)
 			const { stopDiscovery } = await import('./discovery.js')
 			stopDiscovery(this)
 		}
@@ -113,12 +113,12 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		}
 		await this.pollDeviceStatus()
 		UpdateVariables(this)
-		this.checkFeedbacks()
+		this.checkAllFeedbacks()
 		this.startPolling()
 	}
 
 	getConfigFields(): SomeCompanionConfigField[] {
-		return GetConfigFields(this as any)
+		return GetConfigFields(this)
 	}
 
 	updateActions(): void {
@@ -140,8 +140,8 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 	}
 
 	updatePresets(): void {
-		const presets = UpdatePresets(this)
-		this.setPresetDefinitions(presets as any)
+		const { structure, presets } = UpdatePresets(this)
+		this.setPresetDefinitions(structure, presets)
 	}
 
 	private isConfigReady(): boolean {
@@ -181,7 +181,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		}, this.config.pollingInterval ?? 1000)
 		this.variableUpdateInterval = setInterval(() => {
 			UpdateVariables(this)
-			this.checkFeedbacks()
+			this.checkAllFeedbacks()
 			// Lightweight periodic debug trace to confirm regular updates
 			this.debugTick++
 			if (this.debugTick % 5 === 0) {
@@ -228,7 +228,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 				retry: { limit: 0 },
 				https: { rejectUnauthorized: false },
 			})
-			return parseReadResponse(res.body, valueType as any)
+			return parseReadResponse(res.body, valueType)
 		}
 
 		// Normalize gain to dB. Some HTTP paths return linear gain (V/V ~0..5.6), while UDP returns dB.
@@ -531,7 +531,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 
 			// Immediately reflect updates in variables and feedbacks
 			UpdateVariables(this)
-			this.checkFeedbacks()
+			this.checkAllFeedbacks()
 		} catch (e: any) {
 			// Do not downgrade module status on UDP errors; just log
 			this.log('debug', `UDP poll error: ${e?.message || e}`)
@@ -539,4 +539,4 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 	}
 }
 
-runEntrypoint(ModuleInstance, UpgradeScripts)
+export { UpgradeScripts }

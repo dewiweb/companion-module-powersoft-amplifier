@@ -1,4 +1,4 @@
-import type { ModuleInstance } from './main.js'
+import type ModuleInstance from './main.js'
 import { ParameterPaths } from './parameterPaths.js'
 import { ActionType, ValueType } from './enums.js'
 import { buildAgileRequest } from './api.js'
@@ -298,7 +298,6 @@ export function UpdateActions(self: ModuleInstance): void {
 					max: 20,
 					step: 0.5,
 					range: false,
-					required: true,
 				},
 			],
 			callback: async (action) => {
@@ -347,7 +346,6 @@ export function UpdateActions(self: ModuleInstance): void {
 					min: -20,
 					max: 20,
 					step: 0.5,
-					required: true,
 				},
 			],
 			callback: async (action) => {
@@ -394,7 +392,6 @@ export function UpdateActions(self: ModuleInstance): void {
 					default: 1,
 					min: 1,
 					max: 100,
-					required: true,
 				},
 			],
 			callback: async (action) => {

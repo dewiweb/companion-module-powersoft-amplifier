@@ -1,9 +1,11 @@
 {
+	"$schema": "../node_modules/@companion-module/base/assets/manifest.schema.json",
+	"type": "connection",
 	"id": "powersoft-amplifiers",
 	"name": "Powersoft Amplifier",
 	"shortname": "Powersoft",
 	"description": "Control and monitor Powersoft amplifiers via network",
-	"version": "1.0.0",
+	"version": "2.0.0",
 	"license": "MIT",
 	"repository": "git+https://github.com/dewiweb/companion-module-powersoft-amplifier.git",
 	"bugs": "https://github.com/dewiweb/companion-module-powersoft-amplifier/issues",

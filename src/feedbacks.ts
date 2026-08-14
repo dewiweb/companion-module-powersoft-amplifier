@@ -1,5 +1,5 @@
 import { combineRgb } from '@companion-module/base'
-import type { ModuleInstance } from './main.js'
+import type ModuleInstance from './main.js'
 import { ParameterPaths } from './parameterPaths.js'
 import { listDevices, sanitizeDeviceId } from './devices.js'
 

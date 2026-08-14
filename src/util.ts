@@ -1,4 +1,4 @@
-import type { ModuleInstance } from './main.js'
+import type ModuleInstance from './main.js'
 import { InstanceStatus } from '@companion-module/base'
 
 // Interface for Powersoft device status
@@ -137,7 +137,7 @@ export async function updateVariables(self: ModuleInstance, state: DeviceStatus)
 
 		if (Object.keys(changedVars).length > 0) {
 			self.setVariableValues(changedVars)
-			self.checkFeedbacks()
+			self.checkAllFeedbacks()
 		}
 
 		self.updateStatus(InstanceStatus.Ok)
