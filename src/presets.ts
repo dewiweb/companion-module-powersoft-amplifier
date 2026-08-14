@@ -1,20 +1,22 @@
-import { combineRgb, type CompanionPresetDefinitions } from '@companion-module/base'
-import type { ModuleInstance } from './main.js'
-import { listDevices } from './devices.js'
+import { combineRgb, type CompanionPresetDefinitions, type CompanionPresetSection } from '@companion-module/base'
+import type ModuleInstance from './main.js'
+import { listDevices, sanitizeDeviceId } from './devices.js'
 
-export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions {
+export function UpdatePresets(self: ModuleInstance): {
+	structure: CompanionPresetSection[]
+	presets: CompanionPresetDefinitions
+} {
 	const maxChannels = self.config?.maxChannels || 8
 	const defaultDevice = listDevices(self.config)[0] || self.config.host || ''
+	const wsEnabled = Boolean(self.config.enableWebSocketMeters)
 
-	// Helper function to create channel-specific presets
-	const createChannelPresets = (channel: number) => {
+	// Helper to create channel-specific preset definitions
+	const createChannelPresets = (channel: number): CompanionPresetDefinitions => {
 		const channelName = `CH${channel}`
 
 		return {
-			// Mute Toggle
 			[`mute_toggle_ch${channel}`]: {
-				type: 'button',
-				category: `${channelName} Mute`,
+				type: 'simple',
 				name: `${channelName} Mute Toggle`,
 				style: {
 					text: `${channelName}\\nUNMUTED`,
@@ -52,10 +54,8 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 				],
 			},
 
-			// Gain Control (relative)
 			[`gain_up_ch${channel}`]: {
-				type: 'button',
-				category: `${channelName} Gain`,
+				type: 'simple',
 				name: `${channelName} Gain +1 dB`,
 				style: {
 					text: `${channelName}\\nGAIN ▲ +1dB`,
@@ -82,8 +82,7 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 			},
 
 			[`gain_down_ch${channel}`]: {
-				type: 'button',
-				category: `${channelName} Gain`,
+				type: 'simple',
 				name: `${channelName} Gain -1 dB`,
 				style: {
 					text: `${channelName}\\nGAIN ▼ -1dB`,
@@ -109,10 +108,8 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 				feedbacks: [],
 			},
 
-			// Gain Setpoints (absolute)
 			[`gain_set_m10_ch${channel}`]: {
-				type: 'button',
-				category: `${channelName} Gain`,
+				type: 'simple',
 				name: `${channelName} Gain -10 dB`,
 				style: {
 					text: `${channelName}\\nSET -10dB`,
@@ -129,8 +126,7 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 				feedbacks: [],
 			},
 			[`gain_set_0_ch${channel}`]: {
-				type: 'button',
-				category: `${channelName} Gain`,
+				type: 'simple',
 				name: `${channelName} Gain 0 dB`,
 				style: {
 					text: `${channelName}\\nSET 0dB`,
@@ -147,8 +143,7 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 				feedbacks: [],
 			},
 			[`gain_set_p5_ch${channel}`]: {
-				type: 'button',
-				category: `${channelName} Gain`,
+				type: 'simple',
 				name: `${channelName} Gain +5 dB`,
 				style: {
 					text: `${channelName}\\nSET +5dB`,
@@ -165,10 +160,8 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 				feedbacks: [],
 			},
 
-			// Clip Indicator
 			[`clip_indicator_ch${channel}`]: {
-				type: 'button',
-				category: `${channelName} Status`,
+				type: 'simple',
 				name: `${channelName} Clip Indicator`,
 				style: {
 					text: `${channelName}\\nCLIP`,
@@ -177,25 +170,11 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 					bgcolor: combineRgb(200, 200, 200),
 				},
 				steps: [],
-				feedbacks: [
-					{
-						feedbackId: 'channelClip',
-						options: {
-							device: defaultDevice,
-							channel: channel,
-						},
-						style: {
-							bgcolor: combineRgb(255, 255, 0), // Yellow when clipping
-							color: combineRgb(0, 0, 0),
-						},
-					},
-				],
+				feedbacks: [],
 			},
 
-			// Diagnostics: Tone Generator Start
 			[`diag_tone_start_ch${channel}`]: {
-				type: 'button',
-				category: `${channelName} Diagnostics`,
+				type: 'simple',
 				name: `${channelName} Tone Start`,
 				style: {
 					text: `${channelName}\\nTONE ON`,
@@ -217,10 +196,8 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 				feedbacks: [],
 			},
 
-			// Diagnostics: Tone Generator Stop
 			[`diag_tone_stop_ch${channel}`]: {
-				type: 'button',
-				category: `${channelName} Diagnostics`,
+				type: 'simple',
 				name: `${channelName} Tone Stop`,
 				style: {
 					text: `${channelName}\\nTONE OFF`,
@@ -237,10 +214,8 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 				feedbacks: [],
 			},
 
-			// Diagnostics: Impedance Measure Start
 			[`diag_imp_start_ch${channel}`]: {
-				type: 'button',
-				category: `${channelName} Diagnostics`,
+				type: 'simple',
 				name: `${channelName} Impedance Start`,
 				style: {
 					text: `${channelName}\\nIMP ON`,
@@ -262,10 +237,8 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 				feedbacks: [],
 			},
 
-			// Diagnostics: Impedance Measure Stop
 			[`diag_imp_stop_ch${channel}`]: {
-				type: 'button',
-				category: `${channelName} Diagnostics`,
+				type: 'simple',
 				name: `${channelName} Impedance Stop`,
 				style: {
 					text: `${channelName}\\nIMP OFF`,
@@ -282,10 +255,8 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 				feedbacks: [],
 			},
 
-			// Diagnostics: Tone Detection Enable
 			[`diag_det_enable_ch${channel}`]: {
-				type: 'button',
-				category: `${channelName} Diagnostics`,
+				type: 'simple',
 				name: `${channelName} Detection Enable`,
 				style: {
 					text: `${channelName}\\nDETECT ON`,
@@ -307,10 +278,8 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 				feedbacks: [],
 			},
 
-			// Diagnostics: Tone Detection Disable
 			[`diag_det_disable_ch${channel}`]: {
-				type: 'button',
-				category: `${channelName} Diagnostics`,
+				type: 'simple',
 				name: `${channelName} Detection Disable`,
 				style: {
 					text: `${channelName}\\nDETECT OFF`,
@@ -327,10 +296,8 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 				feedbacks: [],
 			},
 
-			// Diagnostics: Stop All on Channel
 			[`diag_stop_all_ch${channel}`]: {
-				type: 'button',
-				category: `${channelName} Diagnostics`,
+				type: 'simple',
 				name: `${channelName} Stop All`,
 				style: {
 					text: `${channelName}\\nSTOP ALL`,
@@ -349,18 +316,16 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 		}
 	}
 
-	// Create presets for each channel
-	const channelPresets = {}
+	// Build per-channel preset definitions
+	const channelPresets: CompanionPresetDefinitions = {}
 	for (let i = 1; i <= maxChannels; i++) {
 		Object.assign(channelPresets, createChannelPresets(i))
 	}
 
 	// Global presets
 	const globalPresets: CompanionPresetDefinitions = {
-		// Power Control (device-level)
 		power_on: {
-			type: 'button',
-			category: 'Power',
+			type: 'simple',
 			name: 'Power On',
 			style: {
 				text: 'POWER\\nON',
@@ -386,8 +351,7 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 			],
 		},
 		power_off: {
-			type: 'button',
-			category: 'Power',
+			type: 'simple',
 			name: 'Power OFF',
 			style: {
 				text: 'POWER\\nOFF',
@@ -404,8 +368,7 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 			feedbacks: [],
 		},
 		power_toggle: {
-			type: 'button',
-			category: 'Power',
+			type: 'simple',
 			name: 'Power TOGGLE',
 			style: {
 				text: 'POWER\nTOGGLE',
@@ -422,10 +385,8 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 			feedbacks: [],
 		},
 
-		// Reset Protection
 		reset_protection: {
-			type: 'button',
-			category: 'Maintenance',
+			type: 'simple',
 			name: 'Reset Protection',
 			style: {
 				text: 'RESET\\nPROTECTION',
@@ -442,10 +403,8 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 			feedbacks: [],
 		},
 
-		// Reset Peak Hold
 		reset_peak_hold: {
-			type: 'button',
-			category: 'Maintenance',
+			type: 'simple',
 			name: 'Reset Peak Hold',
 			style: {
 				text: 'RESET\\nPEAK HOLD',
@@ -462,10 +421,8 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 			feedbacks: [],
 		},
 
-		// Mute/Unmute all channels (per device)
 		mute_all_channels: {
-			type: 'button',
-			category: 'Mute',
+			type: 'simple',
 			name: 'Mute All Channels',
 			style: {
 				text: 'MUTE\nALL',
@@ -485,8 +442,7 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 			feedbacks: [],
 		},
 		unmute_all_channels: {
-			type: 'button',
-			category: 'Mute',
+			type: 'simple',
 			name: 'Unmute All Channels',
 			style: {
 				text: 'UNMUTE\nALL',
@@ -506,10 +462,8 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 			feedbacks: [],
 		},
 
-		// Diagnostics: Stop All (All Channels)
 		stop_all_diagnostics_all: {
-			type: 'button',
-			category: 'Diagnostics',
+			type: 'simple',
 			name: 'Diagnostics Stop All (All CH)',
 			style: {
 				text: 'DIAG\\nSTOP ALL',
@@ -527,11 +481,503 @@ export function UpdatePresets(self: ModuleInstance): CompanionPresetDefinitions 
 		},
 	}
 
-	// Combine all presets
+	// --- WebSocket monitoring presets (layered with gauges) ---
+	const monitoringPresets: CompanionPresetDefinitions = {}
+	const monitoringStructure: CompanionPresetSection[] = []
+
+	if (wsEnabled) {
+		const wsHosts = listDevices(self.config)
+
+		// Helper: create a layered VU meter preset for a channel on a specific device
+		const createVuMeterPreset = (channel: number, deviceHost: string): CompanionPresetDefinitions => {
+			const ch = channel
+			const devId = sanitizeDeviceId(deviceHost)
+			// Unique preset id suffix per device to avoid collisions
+			const suffix = wsHosts.length > 1 ? `_${devId}` : ''
+			const varVrms = `$(Powersoft:ch${ch}_v_rms_${devId})`
+			const varIrms = `$(Powersoft:ch${ch}_i_rms_${devId})`
+			const varHeadroom = `$(Powersoft:ch${ch}_headroom_${devId})`
+
+			return {
+				[`vu_meter_ch${channel}${suffix}`]: {
+					type: 'alternatives',
+					variants: [
+						// Rich layered variant (Companion 5+) — coordinates are percentages 0-100
+						{
+							type: 'layered',
+							name: `CH${channel} VU Meter [${deviceHost}]`,
+							elements: [
+								{
+									id: 'bg',
+									type: 'box',
+									x: 0,
+									y: 0,
+									width: 100,
+									height: 100,
+									color: combineRgb(20, 20, 20),
+									borderWidth: 0,
+								},
+								{
+									id: 'title',
+									type: 'text',
+									x: 0,
+									y: 0,
+									width: 100,
+									height: 18,
+									text: `CH${channel}`,
+									fontsize: 58,
+									fontsizeAllowShrink: true,
+									color: combineRgb(255, 255, 255),
+									halign: 'center',
+									valign: 'center',
+									weight: 'bold',
+								},
+								// V RMS gauge - vertical bar (left half)
+								{
+									id: 'v_gauge',
+									type: 'gauge',
+									x: 8,
+									y: 22,
+									width: 30,
+									height: 70,
+									value: { isExpression: true, value: `parseFloat(${varVrms}) * 10` },
+									min: 0,
+									max: 100,
+									orientation: 'vertical',
+									fillEnabled: true,
+									multiColour: true,
+									fillWidth: 24,
+									trackStyle: 'dimmed',
+									trackWidth: 24,
+									stops: [
+										{ value: 0, color: combineRgb(0, 200, 0), gradient: true },
+										{ value: 70, color: combineRgb(255, 255, 0), gradient: true },
+										{ value: 90, color: combineRgb(255, 0, 0), gradient: true },
+									],
+								},
+								// I RMS gauge - vertical bar (right half)
+								{
+									id: 'i_gauge',
+									type: 'gauge',
+									x: 62,
+									y: 22,
+									width: 30,
+									height: 70,
+									value: { isExpression: true, value: `parseFloat(${varIrms}) * 50` },
+									min: 0,
+									max: 100,
+									orientation: 'vertical',
+									fillEnabled: true,
+									multiColour: true,
+									fillWidth: 24,
+									trackStyle: 'dimmed',
+									trackWidth: 24,
+									stops: [
+										{ value: 0, color: combineRgb(0, 120, 255), gradient: true },
+										{ value: 70, color: combineRgb(255, 255, 0), gradient: true },
+										{ value: 90, color: combineRgb(255, 0, 0), gradient: true },
+									],
+								},
+							],
+							feedbacks: [
+								// Protection -> red border
+								{
+									feedbackId: 'channelProtection',
+									options: { device: deviceHost, channel: channel },
+									styleOverrides: [
+										{ elementId: 'bg', elementProperty: 'borderColor', override: combineRgb(255, 0, 0) },
+										{ elementId: 'bg', elementProperty: 'borderWidth', override: 3 },
+									],
+								},
+								// Thermal limiting -> orange border
+								{
+									feedbackId: 'channelProtectionThermal',
+									options: { device: deviceHost, channel: channel },
+									styleOverrides: [
+										{ elementId: 'bg', elementProperty: 'borderColor', override: combineRgb(255, 165, 0) },
+										{ elementId: 'bg', elementProperty: 'borderWidth', override: 2 },
+									],
+								},
+							],
+							steps: [],
+						},
+						// Simple fallback
+						{
+							type: 'simple',
+							name: `CH${channel} VU Meter [${deviceHost}]`,
+							style: {
+								text: `CH${channel}\\nV:${varVrms}\\nI:${varIrms}`,
+								size: 'auto',
+								color: combineRgb(255, 255, 255),
+								bgcolor: combineRgb(20, 20, 20),
+							},
+							steps: [],
+							feedbacks: [
+								{
+									feedbackId: 'channelProtection',
+									options: { device: deviceHost, channel: channel },
+									style: {
+										bgcolor: combineRgb(200, 0, 0),
+										color: combineRgb(255, 255, 255),
+									},
+								},
+							],
+						},
+					],
+				},
+
+				[`monitor_ch${channel}${suffix}`]: {
+					type: 'alternatives',
+					variants: [
+						{
+							type: 'layered',
+							name: `CH${channel} Monitor [${deviceHost}]`,
+							elements: [
+								{
+									id: 'bg',
+									type: 'box',
+									x: 0,
+									y: 0,
+									width: 100,
+									height: 100,
+									color: combineRgb(20, 20, 20),
+									borderWidth: 0,
+								},
+								{
+									id: 'title',
+									type: 'text',
+									x: 0,
+									y: 0,
+									width: 100,
+									height: 20,
+									text: `CH${channel}`,
+									fontsize: 58,
+									fontsizeAllowShrink: true,
+									color: combineRgb(255, 255, 255),
+									halign: 'center',
+									valign: 'center',
+									weight: 'bold',
+								},
+								{
+									id: 'info',
+									type: 'text',
+									x: 2,
+									y: 20,
+									width: 96,
+									height: 78,
+									text: `V: ${varVrms}V\nI: ${varIrms}A\nHR: ${varHeadroom}`,
+									fontsize: 25,
+									fontsizeAllowShrink: true,
+									color: combineRgb(200, 200, 200),
+									halign: 'center',
+									valign: 'top',
+								},
+							],
+							feedbacks: [
+								{
+									feedbackId: 'channelProtection',
+									options: { device: deviceHost, channel: channel },
+									styleOverrides: [
+										{ elementId: 'bg', elementProperty: 'borderColor', override: combineRgb(255, 0, 0) },
+										{ elementId: 'bg', elementProperty: 'borderWidth', override: 3 },
+									],
+								},
+								{
+									feedbackId: 'channelProtectionThermal',
+									options: { device: deviceHost, channel: channel },
+									styleOverrides: [
+										{ elementId: 'bg', elementProperty: 'borderColor', override: combineRgb(255, 165, 0) },
+										{ elementId: 'bg', elementProperty: 'borderWidth', override: 2 },
+									],
+								},
+								{
+									feedbackId: 'channelGainReduction',
+									options: { device: deviceHost, channel: channel, threshold: 0.95 },
+									styleOverrides: [{ elementId: 'title', elementProperty: 'color', override: combineRgb(255, 165, 0) }],
+								},
+							],
+							steps: [],
+						},
+						{
+							type: 'simple',
+							name: `CH${channel} Monitor [${deviceHost}]`,
+							style: {
+								text: `CH${channel}\\nV:${varVrms}V\\nI:${varIrms}A\\nHR:${varHeadroom}`,
+								size: 'auto',
+								color: combineRgb(255, 255, 255),
+								bgcolor: combineRgb(20, 20, 20),
+							},
+							steps: [],
+							feedbacks: [
+								{
+									feedbackId: 'channelProtection',
+									options: { device: deviceHost, channel: channel },
+									style: {
+										bgcolor: combineRgb(200, 0, 0),
+										color: combineRgb(255, 255, 255),
+									},
+								},
+								{
+									feedbackId: 'channelProtectionThermal',
+									options: { device: deviceHost, channel: channel },
+									style: {
+										bgcolor: combineRgb(255, 165, 0),
+										color: combineRgb(0, 0, 0),
+									},
+								},
+							],
+						},
+					],
+				},
+			}
+		}
+
+		// Helper: create device-level monitoring preset for a specific device
+		const createDeviceMonitorPreset = (deviceHost: string): CompanionPresetDefinitions => {
+			const devId = sanitizeDeviceId(deviceHost)
+			const suffix = wsHosts.length > 1 ? `_${devId}` : ''
+
+			return {
+				[`device_monitor${suffix}`]: {
+					type: 'alternatives',
+					variants: [
+						{
+							type: 'layered',
+							name: `Device Monitor [${deviceHost}]`,
+							elements: [
+								{
+									id: 'bg',
+									type: 'box',
+									x: 0,
+									y: 0,
+									width: 100,
+									height: 100,
+									color: combineRgb(20, 20, 20),
+									borderWidth: 0,
+								},
+								{
+									id: 'title',
+									type: 'text',
+									x: 0,
+									y: 0,
+									width: 100,
+									height: 20,
+									text: `$(Powersoft:name_${devId})`,
+									fontsize: 58,
+									fontsizeAllowShrink: true,
+									color: combineRgb(255, 255, 255),
+									halign: 'center',
+									valign: 'center',
+									weight: 'bold',
+								},
+								{
+									id: 'info',
+									type: 'text',
+									x: 2,
+									y: 20,
+									width: 96,
+									height: 78,
+									text: `DSP: $(Powersoft:dsp_load_${devId})%\nFan: $(Powersoft:fan_${devId})%\nCPU: $(Powersoft:cpu_usage_${devId})%\nTemp: $(Powersoft:temp_mos_l_${devId})C`,
+									fontsize: 25,
+									fontsizeAllowShrink: true,
+									color: combineRgb(200, 200, 200),
+									halign: 'center',
+									valign: 'top',
+								},
+							],
+							feedbacks: [
+								{
+									feedbackId: 'deviceHwFault',
+									options: { device: deviceHost },
+									styleOverrides: [
+										{ elementId: 'bg', elementProperty: 'borderColor', override: combineRgb(255, 0, 0) },
+										{ elementId: 'bg', elementProperty: 'borderWidth', override: 3 },
+									],
+								},
+								{
+									feedbackId: 'deviceOverTempModerate',
+									options: { device: deviceHost },
+									styleOverrides: [
+										{ elementId: 'bg', elementProperty: 'borderColor', override: combineRgb(255, 165, 0) },
+										{ elementId: 'bg', elementProperty: 'borderWidth', override: 2 },
+									],
+								},
+								{
+									feedbackId: 'deviceStandby',
+									options: { device: deviceHost },
+									styleOverrides: [
+										{ elementId: 'title', elementProperty: 'color', override: combineRgb(100, 100, 100) },
+									],
+								},
+							],
+							steps: [],
+						},
+						{
+							type: 'simple',
+							name: `Device Monitor [${deviceHost}]`,
+							style: {
+								text: `$(Powersoft:name_${devId})\\nDSP:$(Powersoft:dsp_load_${devId})%\\nFan:$(Powersoft:fan_${devId})%\\nTemp:$(Powersoft:temp_mos_l_${devId})C`,
+								size: 'auto',
+								color: combineRgb(255, 255, 255),
+								bgcolor: combineRgb(20, 20, 20),
+							},
+							steps: [],
+							feedbacks: [
+								{
+									feedbackId: 'deviceHwFault',
+									options: { device: deviceHost },
+									style: {
+										bgcolor: combineRgb(200, 0, 0),
+										color: combineRgb(255, 255, 255),
+									},
+								},
+								{
+									feedbackId: 'deviceOverTempModerate',
+									options: { device: deviceHost },
+									style: {
+										bgcolor: combineRgb(255, 165, 0),
+										color: combineRgb(0, 0, 0),
+									},
+								},
+							],
+						},
+					],
+				},
+			}
+		}
+
+		// Generate monitoring presets for each device
+		for (const deviceHost of wsHosts) {
+			const devId = sanitizeDeviceId(deviceHost)
+			const suffix = wsHosts.length > 1 ? `_${devId}` : ''
+
+			// Device-level monitor preset
+			Object.assign(monitoringPresets, createDeviceMonitorPreset(deviceHost))
+
+			// Per-channel presets
+			for (let i = 1; i <= maxChannels; i++) {
+				Object.assign(monitoringPresets, createVuMeterPreset(i, deviceHost))
+			}
+
+			// Structure section per device (or single section if only one device)
+			const sectionName = wsHosts.length > 1 ? `Monitoring [${deviceHost}]` : 'Monitoring (WebSocket)'
+			monitoringStructure.push({
+				id: `monitoring_${devId}`,
+				name: sectionName,
+				definitions: [
+					{
+						id: `device_monitor_${devId}`,
+						type: 'simple',
+						name: 'Device Monitor',
+						presets: [`device_monitor${suffix}`],
+					},
+					...Array.from({ length: maxChannels }, (_, i) => {
+						const ch = i + 1
+						return {
+							id: `ch${ch}_vu_${devId}`,
+							type: 'simple' as const,
+							name: `CH${ch} VU Meter`,
+							presets: [`vu_meter_ch${ch}${suffix}`],
+						}
+					}),
+					...Array.from({ length: maxChannels }, (_, i) => {
+						const ch = i + 1
+						return {
+							id: `ch${ch}_monitor_${devId}`,
+							type: 'simple' as const,
+							name: `CH${ch} Monitor`,
+							presets: [`monitor_ch${ch}${suffix}`],
+						}
+					}),
+				],
+			})
+		}
+	}
+
+	// Combine all preset definitions
 	const presets: CompanionPresetDefinitions = {
 		...globalPresets,
 		...channelPresets,
+		...monitoringPresets,
 	}
 
-	return presets
+	// Build the structure that organises presets into sections/groups in the UI
+	const structure: CompanionPresetSection[] = [
+		{
+			id: 'power',
+			name: 'Power',
+			definitions: [
+				{ id: 'power_on', type: 'simple', name: 'Power On', presets: ['power_on'] },
+				{ id: 'power_off', type: 'simple', name: 'Power Off', presets: ['power_off'] },
+				{ id: 'power_toggle', type: 'simple', name: 'Power Toggle', presets: ['power_toggle'] },
+			],
+		},
+		{
+			id: 'maintenance',
+			name: 'Maintenance',
+			definitions: [
+				{ id: 'reset_protection', type: 'simple', name: 'Reset Protection', presets: ['reset_protection'] },
+				{ id: 'reset_peak_hold', type: 'simple', name: 'Reset Peak Hold', presets: ['reset_peak_hold'] },
+			],
+		},
+		{
+			id: 'mute',
+			name: 'Mute',
+			definitions: [
+				{ id: 'mute_all', type: 'simple', name: 'Mute All Channels', presets: ['mute_all_channels'] },
+				{ id: 'unmute_all', type: 'simple', name: 'Unmute All Channels', presets: ['unmute_all_channels'] },
+			],
+		},
+		{
+			id: 'diagnostics',
+			name: 'Diagnostics',
+			definitions: [
+				{
+					id: 'stop_all_diag',
+					type: 'simple',
+					name: 'Stop All Diagnostics (All CH)',
+					presets: ['stop_all_diagnostics_all'],
+				},
+			],
+		},
+		// Per-channel groups
+		...Array.from({ length: maxChannels }, (_, i) => {
+			const ch = i + 1
+			const channelName = `CH${ch}`
+			const channelPresetIds = Object.keys(createChannelPresets(ch))
+			return {
+				id: `channel_${ch}`,
+				name: channelName,
+				definitions: [
+					{
+						id: `${channelName}_mute`,
+						type: 'simple' as const,
+						name: 'Mute',
+						presets: channelPresetIds.filter((p) => p.startsWith('mute_toggle')),
+					},
+					{
+						id: `${channelName}_gain`,
+						type: 'simple' as const,
+						name: 'Gain',
+						presets: channelPresetIds.filter((p) => p.startsWith('gain_')),
+					},
+					{
+						id: `${channelName}_status`,
+						type: 'simple' as const,
+						name: 'Status',
+						presets: channelPresetIds.filter((p) => p.startsWith('clip_indicator')),
+					},
+					{
+						id: `${channelName}_diagnostics`,
+						type: 'simple' as const,
+						name: 'Diagnostics',
+						presets: channelPresetIds.filter((p) => p.startsWith('diag_')),
+					},
+				],
+			}
+		}),
+		...monitoringStructure,
+	]
+
+	return { structure, presets }
 }

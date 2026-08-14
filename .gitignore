@@ -14,3 +14,5 @@ itertools
 # Generated analysis/output artifacts
 scripts/out/
 scripts/out/**
+scripts/_*
+scripts/_*/**

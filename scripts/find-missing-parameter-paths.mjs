@@ -97,7 +97,7 @@ function suggestKeyFor(template) {
 	// Heuristic based on segments
 	const segs = template.split('/').filter(Boolean)
 	const last = segs.slice(-2).join('_') // e.g., Freq1_Value
-	let base = ''
+	let base
 	if (template.includes('/Extra/InputProcess/')) base = 'INPUT_PROCESS_'
 	else if (template.includes('/InputProcess/')) base = 'INPUT_CHANNEL_'
 	else if (template.includes('/InputMatrix/')) base = 'MATRIX_'

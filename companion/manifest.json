@@ -1,9 +1,11 @@
 {
-	"id": "powersoft-amplifiers",
+	"$schema": "../node_modules/@companion-module/base/assets/manifest.schema.json",
+	"type": "connection",
+	"id": "powersoft-amplifier",
 	"name": "Powersoft Amplifier",
 	"shortname": "Powersoft",
 	"description": "Control and monitor Powersoft amplifiers via network",
-	"version": "1.0.0",
+	"version": "2.1.0",
 	"license": "MIT",
 	"repository": "git+https://github.com/dewiweb/companion-module-powersoft-amplifier.git",
 	"bugs": "https://github.com/dewiweb/companion-module-powersoft-amplifier/issues",
@@ -19,7 +21,7 @@
 		"apiVersion": "0.0.0",
 		"entrypoint": "../dist/main.js"
 	},
-	"legacyIds": [],
+	"legacyIds": ["powersoft-amplifiers"],
 	"manufacturer": "Powersoft",
 	"products": ["Amplifier"],
 	"keywords": ["audio", "amplifier", "powersoft", "pro-audio"]

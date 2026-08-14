@@ -1,6 +1,7 @@
 import { Regex, type SomeCompanionConfigField } from '@companion-module/base'
 
 export interface ModuleConfig {
+	[key: string]: any
 	// Top-level mode for clarity in UI
 	mode?: 'single' | 'multi'
 	host: string
@@ -21,6 +22,8 @@ export interface ModuleConfig {
 	udpPort?: number
 	udpPollInterval?: number
 	udpAnswerPortZero?: boolean
+	// WebSocket real-time meters (push-based, read-only)
+	enableWebSocketMeters?: boolean
 }
 
 type InstanceLike = {
@@ -50,7 +53,7 @@ export function GetConfigFields(self?: InstanceLike): SomeCompanionConfigField[]
 			id: 'deviceIds',
 			label: 'Select discovered amplifier(s)',
 			width: 12,
-			isVisible: (cfg) => !!(cfg as any).scan,
+			isVisibleExpression: '!!$(config:scan)',
 			choices: (() => {
 				const list: Array<{ id: string; label: string }> = []
 				try {
@@ -88,10 +91,9 @@ export function GetConfigFields(self?: InstanceLike): SomeCompanionConfigField[]
 			width: 8,
 			regex: Regex.HOSTNAME,
 			default: '',
-			required: false,
 			tooltip:
 				"Optional while scanning: leave empty and select from 'discovered amplifier(s)', or enter a hostname/IP to connect directly.",
-			isVisible: (config) => (config as any).mode !== 'multi',
+			isVisibleExpression: '$(config:mode) != "multi"',
 		},
 		{
 			type: 'number',
@@ -101,8 +103,7 @@ export function GetConfigFields(self?: InstanceLike): SomeCompanionConfigField[]
 			min: 1,
 			max: 65535,
 			default: 80,
-			required: true,
-			isVisible: (config) => (config as any).mode !== 'multi',
+			isVisibleExpression: '$(config:mode) != "multi"',
 		},
 		{
 			type: 'checkbox',
@@ -111,7 +112,7 @@ export function GetConfigFields(self?: InstanceLike): SomeCompanionConfigField[]
 			width: 4,
 			default: false,
 			// Hidden: not needed
-			isVisible: () => false,
+			isVisibleExpression: 'false',
 		},
 		{
 			type: 'textinput',
@@ -119,9 +120,8 @@ export function GetConfigFields(self?: InstanceLike): SomeCompanionConfigField[]
 			label: 'Username (if required)',
 			width: 6,
 			default: '',
-			required: false,
 			// Hidden: not needed
-			isVisible: () => false,
+			isVisibleExpression: 'false',
 		},
 		{
 			type: 'textinput',
@@ -129,9 +129,8 @@ export function GetConfigFields(self?: InstanceLike): SomeCompanionConfigField[]
 			label: 'Password',
 			width: 6,
 			default: '',
-			required: false,
 			// Hidden: not needed
-			isVisible: () => false,
+			isVisibleExpression: 'false',
 		},
 		{
 			type: 'number',
@@ -141,7 +140,6 @@ export function GetConfigFields(self?: InstanceLike): SomeCompanionConfigField[]
 			min: 100,
 			max: 10000,
 			default: 1000,
-			required: true,
 		},
 		{
 			type: 'textinput',
@@ -149,10 +147,9 @@ export function GetConfigFields(self?: InstanceLike): SomeCompanionConfigField[]
 			label: 'Devices IPs (comma or newline separated)',
 			width: 12,
 			default: '',
-			required: false,
 			tooltip:
 				'Optional: List of device IPs for multi-device control in a single instance. Leave empty to use the single Host/Port above.',
-			isVisible: (config) => (config as any).mode === 'multi',
+			isVisibleExpression: '$(config:mode) == "multi"',
 		},
 		{
 			type: 'number',
@@ -162,7 +159,6 @@ export function GetConfigFields(self?: InstanceLike): SomeCompanionConfigField[]
 			min: 1,
 			max: 32,
 			default: 8,
-			required: true,
 		},
 		{
 			type: 'number',
@@ -172,7 +168,6 @@ export function GetConfigFields(self?: InstanceLike): SomeCompanionConfigField[]
 			min: 0,
 			max: 3,
 			default: 3,
-			required: true,
 		},
 		{
 			type: 'textinput',
@@ -180,10 +175,9 @@ export function GetConfigFields(self?: InstanceLike): SomeCompanionConfigField[]
 			label: 'Power/Standby Parameter Path (override)',
 			width: 12,
 			default: '',
-			required: false,
 			tooltip:
 				'Optional: Specify the exact parameter path for power/standby if discovery fails. Example: /Device/ReadOnly/Power/State',
-			isVisible: () => false,
+			isVisibleExpression: 'false',
 		},
 		{
 			type: 'checkbox',
@@ -202,7 +196,7 @@ export function GetConfigFields(self?: InstanceLike): SomeCompanionConfigField[]
 			min: 1,
 			max: 65535,
 			default: 1234,
-			isVisible: (config) => !!(config as any).enableUdpFeedback,
+			isVisibleExpression: '!!$(config:enableUdpFeedback)',
 		},
 		{
 			type: 'number',
@@ -212,7 +206,7 @@ export function GetConfigFields(self?: InstanceLike): SomeCompanionConfigField[]
 			min: 200,
 			max: 10000,
 			default: 1000,
-			isVisible: (config) => !!(config as any).enableUdpFeedback,
+			isVisibleExpression: '!!$(config:enableUdpFeedback)',
 		},
 		{
 			type: 'checkbox',
@@ -221,7 +215,16 @@ export function GetConfigFields(self?: InstanceLike): SomeCompanionConfigField[]
 			width: 6,
 			default: false,
 			tooltip: 'Some firmware answers only when answer_port=0 is used (observed in tests).',
-			isVisible: (config) => !!(config as any).enableUdpFeedback,
+			isVisibleExpression: '!!$(config:enableUdpFeedback)',
+		},
+		{
+			type: 'checkbox',
+			id: 'enableWebSocketMeters',
+			label: 'Enable WebSocket real-time meters',
+			width: 12,
+			default: false,
+			tooltip:
+				'When enabled, the module connects to the amplifier WebSocket endpoint and receives real-time meter data (V/I levels, temperatures, protection status, DSP load, etc.) approximately once per second. This is a read-only connection — no commands are sent to the amplifier.',
 		},
 	]
 }

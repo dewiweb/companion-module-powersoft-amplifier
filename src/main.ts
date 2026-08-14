@@ -1,13 +1,16 @@
 // Minimal Bitfocus Companion module entrypoint for Powersoft
-import { InstanceBase, runEntrypoint, InstanceStatus, SomeCompanionConfigField } from '@companion-module/base'
+import { InstanceBase, InstanceStatus, type SomeCompanionConfigField } from '@companion-module/base'
 import { GetConfigFields, type ModuleConfig } from './config.js'
 import { UpdateVariableDefinitions, UpdateVariables } from './variables.js'
 import { UpdateActions } from './actions.js'
 import { UpdateFeedbacks } from './feedbacks.js'
 import { UpdatePresets } from './presets.js'
 import { UpgradeScripts } from './upgrades.js'
+import { PowersoftWsClient } from './ws.js'
+import { createDefaultDeviceMeters, mergeMeters } from './meters.js'
+import { listDevices, sanitizeDeviceId } from './devices.js'
 
-export class ModuleInstance extends InstanceBase<ModuleConfig> {
+export default class ModuleInstance extends InstanceBase {
 	config!: ModuleConfig
 	pollingInterval: NodeJS.Timeout | null = null
 	variableUpdateInterval: NodeJS.Timeout | null = null
@@ -25,12 +28,14 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 	SCANNING = false
 	discoverySocket?: any
 	_discoveryInterval?: NodeJS.Timeout | null
+	// WebSocket real-time meter clients (per device host)
+	wsClients: Record<string, any> = {}
 
 	constructor(internal: unknown) {
 		super(internal)
 	}
 
-	async init(config: ModuleConfig): Promise<void> {
+	async init(config: ModuleConfig, _isFirstInit: boolean, _secrets: Record<string, any> | undefined): Promise<void> {
 		this.config = config
 		this.clearIntervals()
 		// Discovery lifecycle
@@ -54,7 +59,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		// Seed state immediately so feedbacks/variables reflect current device state ASAP
 		await this.pollDeviceStatus()
 		UpdateVariables(this)
-		this.checkFeedbacks()
+		this.checkAllFeedbacks()
 		this.startPolling()
 	}
 
@@ -69,7 +74,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		this.log('debug', 'destroy')
 	}
 
-	async configUpdated(config: ModuleConfig): Promise<void> {
+	async configUpdated(config: ModuleConfig, _secrets: Record<string, any> | undefined): Promise<void> {
 		this.config = config
 		this.clearIntervals()
 		// Map discovered device(s) -> host/devicesCsv when selected
@@ -82,13 +87,13 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 				const csv = hosts.join(', ')
 				if (csv !== (this.config.devicesCsv || '')) {
 					this.config.devicesCsv = csv
-					this.saveConfig(this.config)
+					;(this as any).saveConfig(this.config)
 				}
 			} else {
 				const first = hosts[0]
 				if (first && this.config.host !== first) {
 					this.config.host = first
-					this.saveConfig(this.config)
+					;(this as any).saveConfig(this.config)
 				}
 			}
 		}
@@ -99,7 +104,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		} else {
 			this.FOUND_DEVICES = {}
 			this.config.deviceIds = []
-			this.saveConfig(this.config)
+			;(this as any).saveConfig(this.config)
 			const { stopDiscovery } = await import('./discovery.js')
 			stopDiscovery(this)
 		}
@@ -113,12 +118,12 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		}
 		await this.pollDeviceStatus()
 		UpdateVariables(this)
-		this.checkFeedbacks()
+		this.checkAllFeedbacks()
 		this.startPolling()
 	}
 
 	getConfigFields(): SomeCompanionConfigField[] {
-		return GetConfigFields(this as any)
+		return GetConfigFields(this)
 	}
 
 	updateActions(): void {
@@ -140,8 +145,8 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 	}
 
 	updatePresets(): void {
-		const presets = UpdatePresets(this)
-		this.setPresetDefinitions(presets as any)
+		const { structure, presets } = UpdatePresets(this)
+		this.setPresetDefinitions(structure, presets)
 	}
 
 	private isConfigReady(): boolean {
@@ -158,6 +163,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		this.pollingInterval = null
 		this.variableUpdateInterval = null
 		this.udpInterval = null
+		this.stopWebSocketClients()
 	}
 
 	startPolling(): void {
@@ -176,12 +182,15 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 				void this.pollUdpStatus()
 			}, this.config.udpPollInterval ?? 1000)
 		}
+		if (this.config.enableWebSocketMeters) {
+			this.startWebSocketClients()
+		}
 		this.pollingInterval = setInterval(() => {
 			void this.pollDeviceStatus()
 		}, this.config.pollingInterval ?? 1000)
 		this.variableUpdateInterval = setInterval(() => {
 			UpdateVariables(this)
-			this.checkFeedbacks()
+			this.checkAllFeedbacks()
 			// Lightweight periodic debug trace to confirm regular updates
 			this.debugTick++
 			if (this.debugTick % 5 === 0) {
@@ -228,7 +237,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 				retry: { limit: 0 },
 				https: { rejectUnauthorized: false },
 			})
-			return parseReadResponse(res.body, valueType as any)
+			return parseReadResponse(res.body, valueType)
 		}
 
 		// Normalize gain to dB. Some HTTP paths return linear gain (V/V ~0..5.6), while UDP returns dB.
@@ -531,12 +540,71 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 
 			// Immediately reflect updates in variables and feedbacks
 			UpdateVariables(this)
-			this.checkFeedbacks()
+			this.checkAllFeedbacks()
 		} catch (e: any) {
 			// Do not downgrade module status on UDP errors; just log
 			this.log('debug', `UDP poll error: ${e?.message || e}`)
 		}
 	}
+
+	/**
+	 * Start WebSocket meter clients for all configured devices.
+	 * Each amplifier gets its own push-based connection that receives
+	 * real-time meter data (V/I, temperature, protection, DSP load, etc.).
+	 */
+	startWebSocketClients(): void {
+		this.stopWebSocketClients()
+		const hosts = listDevices(this.config)
+		const chCount = this.config.maxChannels ?? 8
+
+		for (const host of hosts) {
+			const id = sanitizeDeviceId(host)
+			// Ensure device status and meters structure exist
+			if (!this.deviceStatusById[id]) this.deviceStatusById[id] = { channels: [], speakers: [] }
+			if (!this.deviceStatusById[id].meters) {
+				this.deviceStatusById[id].meters = createDefaultDeviceMeters(chCount)
+			}
+
+			const client = new PowersoftWsClient({
+				host,
+				port: this.config.port ?? 80,
+				useHttps: this.config.useHttps ?? false,
+				username: this.config.username,
+				password: this.config.password,
+				log: (level, msg) => this.log(level, msg),
+				onStatus: (connected) => {
+					this.log('debug', `WS [${host}] ${connected ? 'connected' : 'disconnected'}`)
+				},
+				onMeters: (meters) => {
+					const status = this.deviceStatusById[id]
+					if (!status) return
+					if (!status.meters) status.meters = createDefaultDeviceMeters(chCount)
+					const changed = mergeMeters(status.meters, chCount, meters)
+					if (changed) {
+						UpdateVariables(this)
+						this.checkAllFeedbacks()
+					}
+				},
+			})
+			client.connect()
+			this.wsClients[host] = client
+		}
+		this.log('info', `WebSocket meters enabled for ${hosts.length} device(s)`)
+	}
+
+	/**
+	 * Disconnect all WebSocket meter clients.
+	 */
+	stopWebSocketClients(): void {
+		for (const host of Object.keys(this.wsClients)) {
+			try {
+				this.wsClients[host]?.disconnect()
+			} catch {
+				// ignore
+			}
+		}
+		this.wsClients = {}
+	}
 }
 
-runEntrypoint(ModuleInstance, UpgradeScripts)
+export { UpgradeScripts }

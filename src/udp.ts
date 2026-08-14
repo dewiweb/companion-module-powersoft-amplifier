@@ -1,4 +1,4 @@
-import dgram from 'dgram'
+import * as dgram from 'dgram'
 
 // Minimal UDP client for Powersoft Canali-DSP second API (read-only)
 // Implements: READGM (0x01), STANDBY (0x0E - read), READALLALARMS2 (0x19)
@@ -72,6 +72,7 @@ function buildFrame(cmd: number, cookie: number, answerPort: number, data: Buffe
 	out.writeUInt16LE(crc & 0xffff, o)
 	o += 2
 	out[o++] = ~cmd & 0xff
+	// eslint-disable-next-line no-useless-assignment
 	out[o++] = 0x03 // ETX
 	return out
 }
