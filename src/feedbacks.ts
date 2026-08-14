@@ -15,6 +15,7 @@ export type FeedbackId =
 	| 'diagImpMeasureEnabled'
 	| 'diagToneDetectionEnabled'
 	| 'deviceFault'
+	| 'deviceConnected'
 	| 'channelOverTemp'
 	| 'channelLowLoad'
 	| 'channelRailFault'
@@ -122,6 +123,30 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 				const status = resolveStatus(feedback.options.device as string)
 				const err = status.error
 				return Boolean(err && err !== 'None')
+			},
+		},
+
+		// Device Connection Feedback
+		deviceConnected: {
+			type: 'boolean',
+			name: 'Device Connected',
+			description: 'Indicates if the amplifier is reachable and responding to polling',
+			defaultStyle: {
+				bgcolor: combineRgb(0, 200, 0), // Green when connected
+				color: combineRgb(0, 0, 0),
+			},
+			options: [
+				{
+					type: 'dropdown',
+					id: 'device',
+					label: 'Device',
+					default: deviceChoices()[0]?.id,
+					choices: deviceChoices(),
+				},
+			],
+			callback: (feedback) => {
+				const status = resolveStatus(feedback.options.device as string)
+				return status.connected !== false
 			},
 		},
 

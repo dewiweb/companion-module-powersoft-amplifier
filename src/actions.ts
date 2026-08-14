@@ -20,6 +20,7 @@ async function postToAmplifier(url: string, payload: any, self: ModuleInstance) 
 			json: payload,
 			responseType: 'json',
 			timeout: { request: 5000 },
+			retry: { limit: 0 }, // Do not retry: a dead device would otherwise hang for 15s+ per write
 			https: { rejectUnauthorized: false }, // Some devices may use self-signed certs
 		})
 		self.log('debug', `Response ${res.statusCode}: ${JSON.stringify(res.body)}`)
@@ -54,6 +55,27 @@ export function UpdateActions(self: ModuleInstance): void {
 			selected && String(selected).length > 0 ? String(selected) : listDevices(self.config)[0] || self.config.host
 		return host ? [host] : []
 	}
+	// Post to a host, swallowing per-host errors so one dead amplifier does not
+	// reject the whole action (which would surface as an unhandled rejection in
+	// Companion). Errors are logged and the loop continues to the next host.
+	const postToHostSafe = async (host: string, payload: any) => {
+		const url = getAmplifierApiUrl(host, self.config.useHttps, self.config.port)
+		try {
+			await postToAmplifier(url, payload, self)
+		} catch (e: any) {
+			self.log('warn', `Action failed for ${host}: ${e?.message || e}`)
+		}
+	}
+	// Post to a resolved URL, swallowing errors for the same reason as postToHostSafe.
+	// The optional third argument is accepted for call-site compatibility with the
+	// previous postToAmplifier(url, payload, self) signature and is ignored.
+	const postToUrlSafe = async (url: string, payload: any, _self?: unknown) => {
+		try {
+			await postToAmplifier(url, payload, self)
+		} catch (e: any) {
+			self.log('warn', `Action failed for ${url}: ${e?.message || e}`)
+		}
+	}
 	self.setActionDefinitions({
 		// Power Control
 		powerOn: {
@@ -77,8 +99,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					value: false, // Standby OFF = Power ON
 				})
 				for (const host of hosts) {
-					const url = getAmplifierApiUrl(host, self.config.useHttps, self.config.port)
-					await postToAmplifier(url, payload, self)
+					await postToHostSafe(host, payload)
 				}
 			},
 		},
@@ -102,8 +123,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					value: true, // Standby ON = Power OFF
 				})
 				for (const host of hosts) {
-					const url = getAmplifierApiUrl(host, self.config.useHttps, self.config.port)
-					await postToAmplifier(url, payload, self)
+					await postToHostSafe(host, payload)
 				}
 			},
 		},
@@ -124,14 +144,13 @@ export function UpdateActions(self: ModuleInstance): void {
 				for (const host of hosts) {
 					const id = sanitizeDeviceId(host || '')
 					const current = self.deviceStatusById[id]?.power === true
-					const url = getAmplifierApiUrl(host, self.config.useHttps, self.config.port)
 					const payload = buildAgileRequest({
 						actionType: ActionType.WRITE,
 						valueType: ValueType.BOOL,
 						path: ParameterPaths.DEVICE_STANDBY,
 						value: current ? true : false, // if currently ON -> standby true (turn off), else standby false (turn on)
 					})
-					await postToAmplifier(url, payload, self)
+					await postToHostSafe(host, payload)
 				}
 			},
 		},
@@ -169,8 +188,7 @@ export function UpdateActions(self: ModuleInstance): void {
 				})
 				const hosts = resolveHosts(action.options.device as string)
 				for (const host of hosts) {
-					const url = getAmplifierApiUrl(host, self.config.useHttps, self.config.port)
-					await postToAmplifier(url, payload, self)
+					await postToHostSafe(host, payload)
 				}
 			},
 		},
@@ -206,8 +224,7 @@ export function UpdateActions(self: ModuleInstance): void {
 				})
 				const hosts = resolveHosts(action.options.device as string)
 				for (const host of hosts) {
-					const url = getAmplifierApiUrl(host, self.config.useHttps, self.config.port)
-					await postToAmplifier(url, payload, self)
+					await postToHostSafe(host, payload)
 				}
 			},
 		},
@@ -240,14 +257,13 @@ export function UpdateActions(self: ModuleInstance): void {
 				for (const host of hosts) {
 					const id = sanitizeDeviceId(host || '')
 					const current = self.deviceStatusById[id]?.channels?.[ch]?.mute === true
-					const url = getAmplifierApiUrl(host, self.config.useHttps, self.config.port)
 					const payload = buildAgileRequest({
 						actionType: ActionType.WRITE,
 						valueType: ValueType.BOOL,
 						path,
 						value: !current,
 					})
-					await postToAmplifier(url, payload, self)
+					await postToHostSafe(host, payload)
 				}
 			},
 		},
@@ -298,7 +314,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					path,
 					value: lin,
 				})
-				await postToAmplifier(url, payload, self)
+				await postToUrlSafe(url, payload, self)
 			},
 		},
 
@@ -356,7 +372,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					path,
 					value: lin,
 				})
-				await postToAmplifier(url, payload, self)
+				await postToUrlSafe(url, payload, self)
 			},
 		},
 
@@ -462,7 +478,7 @@ export function UpdateActions(self: ModuleInstance): void {
 				const enPath = ParameterPaths.OUTPUT_SPEAKER_GENERATOR_ENABLE.replace('{0}', String(ch))
 				const freq = Number(action.options.frequency)
 				const level = Number(action.options.level)
-				await postToAmplifier(
+				await postToUrlSafe(
 					url,
 					buildAgileRequest({
 						actionType: ActionType.WRITE,
@@ -472,7 +488,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					}),
 					self,
 				)
-				await postToAmplifier(
+				await postToUrlSafe(
 					url,
 					buildAgileRequest({
 						actionType: ActionType.WRITE,
@@ -482,7 +498,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					}),
 					self,
 				)
-				await postToAmplifier(
+				await postToUrlSafe(
 					url,
 					buildAgileRequest({
 						actionType: ActionType.WRITE,
@@ -513,7 +529,7 @@ export function UpdateActions(self: ModuleInstance): void {
 				const url = resolveUrl(action.options.device as string)
 				const ch = (action.options.channel as number) - 1
 				const enPath = ParameterPaths.OUTPUT_SPEAKER_GENERATOR_ENABLE.replace('{0}', String(ch))
-				await postToAmplifier(
+				await postToUrlSafe(
 					url,
 					buildAgileRequest({
 						actionType: ActionType.WRITE,
@@ -552,7 +568,7 @@ export function UpdateActions(self: ModuleInstance): void {
 				const minPath = ParameterPaths.OUTPUT_SPEAKER_IMPEDANCE_DETECTION_MIN_V.replace('{0}', String(ch))
 				const maxPath = ParameterPaths.OUTPUT_SPEAKER_IMPEDANCE_DETECTION_MAX_V.replace('{0}', String(ch))
 				const enPath = ParameterPaths.OUTPUT_SPEAKER_IMPEDANCE_DETECTION_ENABLE.replace('{0}', String(ch))
-				await postToAmplifier(
+				await postToUrlSafe(
 					url,
 					buildAgileRequest({
 						actionType: ActionType.WRITE,
@@ -562,7 +578,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					}),
 					self,
 				)
-				await postToAmplifier(
+				await postToUrlSafe(
 					url,
 					buildAgileRequest({
 						actionType: ActionType.WRITE,
@@ -572,7 +588,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					}),
 					self,
 				)
-				await postToAmplifier(
+				await postToUrlSafe(
 					url,
 					buildAgileRequest({
 						actionType: ActionType.WRITE,
@@ -582,7 +598,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					}),
 					self,
 				)
-				await postToAmplifier(
+				await postToUrlSafe(
 					url,
 					buildAgileRequest({
 						actionType: ActionType.WRITE,
@@ -613,7 +629,7 @@ export function UpdateActions(self: ModuleInstance): void {
 				const url = resolveUrl(action.options.device as string)
 				const ch = (action.options.channel as number) - 1
 				const enPath = ParameterPaths.OUTPUT_SPEAKER_IMPEDANCE_DETECTION_ENABLE.replace('{0}', String(ch))
-				await postToAmplifier(
+				await postToUrlSafe(
 					url,
 					buildAgileRequest({
 						actionType: ActionType.WRITE,
@@ -652,7 +668,7 @@ export function UpdateActions(self: ModuleInstance): void {
 				const minPath = ParameterPaths.OUTPUT_SPEAKER_TONE_DETECTION_MIN_TH.replace('{0}', String(ch))
 				const maxPath = ParameterPaths.OUTPUT_SPEAKER_TONE_DETECTION_MAX_TH.replace('{0}', String(ch))
 				const enPath = ParameterPaths.OUTPUT_SPEAKER_TONE_DETECTION_ENABLE.replace('{0}', String(ch))
-				await postToAmplifier(
+				await postToUrlSafe(
 					url,
 					buildAgileRequest({
 						actionType: ActionType.WRITE,
@@ -662,7 +678,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					}),
 					self,
 				)
-				await postToAmplifier(
+				await postToUrlSafe(
 					url,
 					buildAgileRequest({
 						actionType: ActionType.WRITE,
@@ -672,7 +688,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					}),
 					self,
 				)
-				await postToAmplifier(
+				await postToUrlSafe(
 					url,
 					buildAgileRequest({
 						actionType: ActionType.WRITE,
@@ -682,7 +698,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					}),
 					self,
 				)
-				await postToAmplifier(
+				await postToUrlSafe(
 					url,
 					buildAgileRequest({
 						actionType: ActionType.WRITE,
@@ -713,7 +729,7 @@ export function UpdateActions(self: ModuleInstance): void {
 				const url = resolveUrl(action.options.device as string)
 				const ch = (action.options.channel as number) - 1
 				const enPath = ParameterPaths.OUTPUT_SPEAKER_TONE_DETECTION_ENABLE.replace('{0}', String(ch))
-				await postToAmplifier(
+				await postToUrlSafe(
 					url,
 					buildAgileRequest({
 						actionType: ActionType.WRITE,
@@ -748,7 +764,7 @@ export function UpdateActions(self: ModuleInstance): void {
 				const gen = ParameterPaths.OUTPUT_SPEAKER_GENERATOR_ENABLE.replace('{0}', String(ch))
 				const imp = ParameterPaths.OUTPUT_SPEAKER_IMPEDANCE_DETECTION_ENABLE.replace('{0}', String(ch))
 				const det = ParameterPaths.OUTPUT_SPEAKER_TONE_DETECTION_ENABLE.replace('{0}', String(ch))
-				await postToAmplifier(
+				await postToUrlSafe(
 					url,
 					buildAgileRequest({
 						actionType: ActionType.WRITE,
@@ -758,7 +774,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					}),
 					self,
 				)
-				await postToAmplifier(
+				await postToUrlSafe(
 					url,
 					buildAgileRequest({
 						actionType: ActionType.WRITE,
@@ -768,7 +784,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					}),
 					self,
 				)
-				await postToAmplifier(
+				await postToUrlSafe(
 					url,
 					buildAgileRequest({
 						actionType: ActionType.WRITE,
@@ -791,40 +807,36 @@ export function UpdateActions(self: ModuleInstance): void {
 				const hosts = resolveHosts(action.options.device as string)
 				const maxCh = self.config.maxChannels || 8
 				for (const host of hosts) {
-					const url = getAmplifierApiUrl(host, self.config.useHttps, self.config.port)
 					for (let ch = 0; ch < maxCh; ch++) {
 						const gen = ParameterPaths.OUTPUT_SPEAKER_GENERATOR_ENABLE.replace('{0}', String(ch))
 						const imp = ParameterPaths.OUTPUT_SPEAKER_IMPEDANCE_DETECTION_ENABLE.replace('{0}', String(ch))
 						const det = ParameterPaths.OUTPUT_SPEAKER_TONE_DETECTION_ENABLE.replace('{0}', String(ch))
-						await postToAmplifier(
-							url,
+						await postToHostSafe(
+							host,
 							buildAgileRequest({
 								actionType: ActionType.WRITE,
 								valueType: ValueType.BOOL,
 								path: gen,
 								value: false,
 							}),
-							self,
 						)
-						await postToAmplifier(
-							url,
+						await postToHostSafe(
+							host,
 							buildAgileRequest({
 								actionType: ActionType.WRITE,
 								valueType: ValueType.BOOL,
 								path: imp,
 								value: false,
 							}),
-							self,
 						)
-						await postToAmplifier(
-							url,
+						await postToHostSafe(
+							host,
 							buildAgileRequest({
 								actionType: ActionType.WRITE,
 								valueType: ValueType.BOOL,
 								path: det,
 								value: false,
 							}),
-							self,
 						)
 					}
 				}

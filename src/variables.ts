@@ -20,6 +20,7 @@ export function UpdateVariableDefinitions(self: ModuleInstance): void {
 			{ variableId: `firmware_${id}`, name: `Firmware Version [${label}]` },
 			{ variableId: `ip_${id}`, name: `IP Address [${label}]` },
 			{ variableId: `power_${id}`, name: `Power State [${label}]` },
+			{ variableId: `connected_${id}`, name: `Connection State [${label}]` },
 			{ variableId: `temperature_${id}`, name: `Device Temperature (°C) [${label}]` },
 			{ variableId: `fanSpeed_${id}`, name: `Fan Speed (%) [${label}]` },
 			{ variableId: `error_${id}`, name: `Error Message [${label}]` },
@@ -71,6 +72,7 @@ export function UpdateVariables(self: ModuleInstance): void {
 		variables[`firmware_${id}`] = status.firmware || '0.0.0'
 		variables[`ip_${id}`] = status.ip || label
 		variables[`power_${id}`] = status.power ? 'On' : 'Off'
+		variables[`connected_${id}`] = status.connected === false ? 'Disconnected' : 'Connected'
 		variables[`temperature_${id}`] = fmtTemp(status.temp)
 		variables[`fanSpeed_${id}`] = fmtPct(status.fanSpeed)
 		variables[`error_${id}`] = status.error || 'None'

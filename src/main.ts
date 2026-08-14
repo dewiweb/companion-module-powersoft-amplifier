@@ -211,13 +211,21 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		const deviceIps = listDevices(this.config)
 		const defaultHost = this.config.host
 
-		// Helper to perform a single read
-		const readValue = async (url: string, path: string, valueType: number) => {
+		// Default request timeout for regular reads. Discovery/probe reads use a shorter
+		// timeout to avoid blocking for minutes when a device is unreachable.
+		const readTimeout = Math.max(2000, this.config.pollingInterval ?? 1000)
+		const probeTimeout = Math.min(2000, Math.max(1000, ((this.config.pollingInterval ?? 1000) / 2) | 0))
+
+		// Helper to perform a single read.
+		// got retries are disabled (limit: 0) so a dead device fails fast instead of
+		// being retried 3x per request, which previously caused multi-minute hangs.
+		const readValue = async (url: string, path: string, valueType: number, timeoutMs: number = readTimeout) => {
 			const payload = buildAgileRequest({ actionType: ActionType.READ, valueType, path })
 			const res = await got.post(url, {
 				json: payload,
 				responseType: 'json',
-				timeout: { request: Math.max(2000, this.config.pollingInterval) },
+				timeout: { request: timeoutMs },
+				retry: { limit: 0 },
 				https: { rejectUnauthorized: false },
 			})
 			return parseReadResponse(res.body, valueType as any)
@@ -239,7 +247,8 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 			}
 		}
 
-		// Diagnostic helper for standby to capture raw response using preferred and fallback types
+		// Diagnostic helper for standby to capture raw response using preferred and fallback types.
+		// Uses the short probe timeout so discovery cannot block for long on an unreachable device.
 		const readValueWithDebug = async (url: string, path: string) => {
 			const preferred = getPreferredValueTypeForPath(path, ValueType.STRING)
 			const tryTypes: number[] = [
@@ -255,7 +264,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 				if (tried.has(t)) continue
 				tried.add(t)
 				try {
-					const val = await readValue(url, path, t)
+					const val = await readValue(url, path, t, probeTimeout)
 					this.log('debug', `standby-read path=${path} as ${ValueType[t] ?? t} -> ${String(val)}`)
 					if (val !== undefined) return { raw: val, valueType: (ValueType[t] ?? String(t)) as any }
 				} catch (e: any) {
@@ -299,6 +308,10 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 			const staggerMs = 150
 			let firstId: string | undefined
 
+			// Track per-device poll outcome for aggregate status reporting
+			const unreachableHosts: string[] = []
+			const okHosts: string[] = []
+
 			const tasks = hosts.map(async (host, idx) => {
 				await delay(idx * staggerMs)
 				const scheme = this.config.useHttps ? 'https' : 'http'
@@ -311,6 +324,9 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 				const until = this.backoffUntilById[id] || 0
 				if (Date.now() < until) {
 					this.log('debug', `poll-skip[${id}] in backoff for ${Math.max(0, until - Date.now())}ms`)
+					// Preserve previously recorded unreachable state for aggregate status
+					if (this.deviceStatusById[id]?.connected === false) unreachableHosts.push(host)
+					else okHosts.push(host)
 					return
 				}
 
@@ -323,6 +339,19 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 						if (!this.deviceStatusById[id].channels[i]) this.deviceStatusById[id].channels[i] = {}
 						if (!this.deviceStatusById[id].speakers[i]) this.deviceStatusById[id].speakers[i] = {}
 					}
+
+					// Reachability probe: a single short-timeout read. If the device does not
+					// respond, bail out immediately instead of running the expensive power-path
+					// discovery (up to 48 sequential reads) which previously blocked for minutes.
+					try {
+						await readValue(url, ParameterPaths.DEVICE_FIRMWARE_VERSION, ValueType.STRING, probeTimeout)
+					} catch (probeErr: any) {
+						throw Object.assign(new Error(`unreachable: ${probeErr?.message || probeErr}`), { isUnreachable: true })
+					}
+
+					// Device responded -> mark connected and clear stale error
+					this.deviceStatusById[id].connected = true
+					this.deviceStatusById[id].error = 'None'
 
 					// Determine power path per device (override -> cached -> discovery)
 					let powerPath: string | undefined = this.powerPathMap[id]
@@ -424,6 +453,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 					// success -> reset error/backoff
 					this.errorCountById[id] = 0
 					this.backoffUntilById[id] = 0
+					okHosts.push(host)
 				} catch (perHostErr: any) {
 					// failure -> increment error/backoff for this device only
 					const prev = this.errorCountById[id] || 0
@@ -431,6 +461,10 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 					this.errorCountById[id] = next
 					const backoff = Math.min(30000, 1000 * Math.pow(2, Math.min(5, next - 1)))
 					this.backoffUntilById[id] = Date.now() + backoff
+					// Mark device unreachable and surface it in variables/feedbacks
+					this.deviceStatusById[id].connected = false
+					this.deviceStatusById[id].error = 'Unreachable'
+					unreachableHosts.push(host)
 					this.log(
 						'debug',
 						`poll-error[${id}] count=${next} backoffMs=${backoff} err=${perHostErr?.message || perHostErr}`,
@@ -443,7 +477,14 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 			// Maintain legacy single-device mirror for first configured device
 			if (firstId) this.deviceStatus = this.deviceStatusById[firstId]
 
-			this.updateStatus(InstanceStatus.Ok)
+			// Aggregate status reflects per-device outcomes instead of always Ok
+			if (unreachableHosts.length > 0 && okHosts.length === 0) {
+				this.updateStatus(InstanceStatus.ConnectionFailure, `Unreachable: ${unreachableHosts.join(', ')}`)
+			} else if (unreachableHosts.length > 0) {
+				this.updateStatus(InstanceStatus.UnknownWarning, `Unreachable: ${unreachableHosts.join(', ')}`)
+			} else {
+				this.updateStatus(InstanceStatus.Ok)
+			}
 		} catch (err: any) {
 			this.log('error', `Polling error: ${err.message || String(err)}`)
 			this.updateStatus(InstanceStatus.UnknownError, err.message || String(err))
