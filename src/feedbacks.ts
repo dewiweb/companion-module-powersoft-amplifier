@@ -23,31 +23,19 @@ export type FeedbackId =
 	| 'channelThermalSOA'
 	| 'channelAuxCurrentFault'
 
-interface FeedbackBase {
-	type: 'boolean' | 'advanced'
+interface Feedback {
+	type: 'boolean'
 	name: string
 	description: string
 	defaultStyle: {
 		bgcolor: number
 		color: number
 	}
-}
-
-interface BooleanFeedback extends FeedbackBase {
-	type: 'boolean'
-	options: any[]
-	callback: (feedback: any) => boolean | Promise<boolean>
-}
-
-interface AdvancedFeedback extends FeedbackBase {
-	type: 'advanced'
 	options: any[]
 	callback: (feedback: any) => boolean | Promise<boolean>
 	subscribe?: (feedback: any) => void
 	learn?: (feedback: any) => any
 }
-
-type Feedback = BooleanFeedback | AdvancedFeedback
 
 export function UpdateFeedbacks(self: ModuleInstance): void {
 	// Detect available capabilities from parameter paths (presence-based)
@@ -360,7 +348,7 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 	// Conditionally register optional feedbacks
 	if (hasClip) {
 		feedbacks.channelClip = {
-			type: 'advanced',
+			type: 'boolean',
 			name: 'Channel Clipping',
 			description: 'Indicates if a specific channel is clipping',
 			defaultStyle: {
@@ -396,7 +384,7 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 
 	if (hasSignal) {
 		feedbacks.channelSignal = {
-			type: 'advanced',
+			type: 'boolean',
 			name: 'Channel Signal Present',
 			description: 'Indicates if a signal is present on a specific channel',
 			defaultStyle: {
@@ -432,7 +420,7 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 
 	if (hasTemp) {
 		feedbacks.channelTempWarning = {
-			type: 'advanced',
+			type: 'boolean',
 			name: 'Channel Temperature Warning',
 			description: 'Indicates if a channel temperature is above warning level',
 			defaultStyle: {
@@ -464,7 +452,6 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 					default: 70,
 					min: 30,
 					max: 100,
-					required: true,
 				},
 			],
 			callback: (feedback) => {
@@ -476,7 +463,7 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 		}
 
 		feedbacks.channelTempCritical = {
-			type: 'advanced',
+			type: 'boolean',
 			name: 'Channel Temperature Critical',
 			description: 'Indicates if a channel temperature is above critical level',
 			defaultStyle: {
@@ -508,7 +495,6 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 					default: 85,
 					min: 40,
 					max: 120,
-					required: true,
 				},
 			],
 			callback: (feedback) => {
@@ -522,7 +508,7 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 
 	if (hasImpedance) {
 		feedbacks.channelImpedanceWarning = {
-			type: 'advanced',
+			type: 'boolean',
 			name: 'Channel Impedance Warning',
 			description: 'Indicates if a channel impedance is below warning level',
 			defaultStyle: {
@@ -555,7 +541,6 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 					min: 1,
 					max: 32,
 					step: 0.1,
-					required: true,
 				},
 			],
 			callback: (feedback) => {
@@ -679,7 +664,7 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 	// Set the feedback definitions
 	// Expose which feedbacks are registered (for debug logs)
 	;(self as any).supportedFeedbacks = Object.keys(feedbacks)
-	self.setFeedbackDefinitions(feedbacks as any)
+	self.setFeedbackDefinitions(feedbacks)
 
 	// Note: The module should call checkFeedbacks() whenever the device status changes
 	// This is typically done in the main module code when processing updates from the device
